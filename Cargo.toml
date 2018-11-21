@@ -1,0 +1,6 @@
+[package]
+name = "rust-s57"
+version = "0.1.0"
+authors = ["Henrik <henrik.sodergren@outlook.com>"]
+
+[dependencies]
