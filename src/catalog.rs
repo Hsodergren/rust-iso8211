@@ -26,6 +26,68 @@ struct DirectoryEntry {
     offset: u32, // The offset in bytes form the start of the record
 }
 
+#[derive(Debug, PartialEq)]
+enum DataStructureCode {
+    SDI, // Single Data Item
+    LS,  // Linear Structure
+    MDS, // Multi-Dimensional structure
+}
+impl DataStructureCode {
+    fn new(value: u8) -> Result<DataStructureCode> {
+        match value {
+            0 => Ok(DataStructureCode::SDI),
+            1 => Ok(DataStructureCode::LS),
+            2 => Ok(DataStructureCode::MDS),
+            _ => Err(E::BadDataStructureCode()),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum DataTypeCode {
+    CS,  // Character String
+    IP,  // Implicit Point
+    EP,  // Explicit Point (Real)
+    BF,  // Binary Form
+    MDT, // Mixed Data Types
+}
+impl DataTypeCode {
+    fn new(value: u8) -> Result<DataTypeCode> {
+        match value {
+            0 => Ok(DataTypeCode::CS),
+            1 => Ok(DataTypeCode::IP),
+            2 => Ok(DataTypeCode::EP),
+            5 => Ok(DataTypeCode::BF),
+            6 => Ok(DataTypeCode::MDT),
+            _ => Err(E::BadDataTypeCode()),
+        }
+    }
+}
+
+// Truncated Escape Sequence
+#[derive(Debug, PartialEq)]
+enum TruncEscSeq {
+    LE0, //Lexical Level 0
+    LE1, //Lexical Level 1
+    LE2, //Lexical Level 2
+}
+impl TruncEscSeq {
+    fn new(value: String) -> Result<TruncEscSeq> {
+        match value.as_ref() {
+            "   " => Ok(TruncEscSeq::LE0),
+            "-A " => Ok(TruncEscSeq::LE1),
+            "%/@" => Ok(TruncEscSeq::LE2),
+            _ => Err(E::BadTruncEscSeq()),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct FileControlField {
+    dsc: DataStructureCode, // Data structure code
+    dtc: DataTypeCode,
+}
+
 pub type Result<T> = std::result::Result<T, E>;
 
 #[derive(Debug)]
@@ -34,6 +96,9 @@ pub enum E {
     ParseError(std::string::ParseError),
     ParseIntError(std::num::ParseIntError),
     BadDirectoryData(),
+    BadDataStructureCode(),
+    BadDataTypeCode(),
+    BadTruncEscSeq(),
 }
 
 impl From<std::str::Utf8Error> for E {
