@@ -1,3 +1,4 @@
+mod catalog;
 #[cfg(test)]
 mod tests {
     #[test]
