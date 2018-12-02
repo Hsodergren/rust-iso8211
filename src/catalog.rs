@@ -1,6 +1,9 @@
 use std::io::Read;
 use std::str::{from_utf8, Utf8Error};
 
+const RECORD_SEPARATOR: &str = "\u{1E}";
+const UNIT_SEPARATOR: &str = "\u{1F}";
+
 #[derive(Debug, PartialEq)]
 struct Leader {
     rl: u32,        // Record Lenght
@@ -226,5 +229,14 @@ mod test {
         let expected = get_test_direcory();
         let actual = parse_directory(directory, leader).unwrap();
         assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_file_control_field() {
+        let file_control_field = format!(
+            "{}{}{}{}",
+            "0000;&   ", UNIT_SEPARATOR, "0001CATD", RECORD_SEPARATOR
+        );
+        assert_eq!()
     }
 }
