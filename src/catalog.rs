@@ -95,15 +95,21 @@ pub type Result<T> = std::result::Result<T, E>;
 
 #[derive(Debug)]
 pub enum E {
-    UtfError(std::str::Utf8Error),
-    ParseError(std::string::ParseError),
-    ParseIntError(std::num::ParseIntError),
-    BadDirectoryData(),
     BadDataStructureCode(),
     BadDataTypeCode(),
+    BadDirectoryData(),
     BadTruncEscSeq(),
+    IOError(std::io::Error),
+    ParseError(std::string::ParseError),
+    ParseIntError(std::num::ParseIntError),
+    UtfError(std::str::Utf8Error),
 }
 
+impl From<std::io::Error> for E {
+    fn from(e: std::io::Error) -> E {
+        E::IOError(e)
+    }
+}
 impl From<std::str::Utf8Error> for E {
     fn from(e: Utf8Error) -> E {
         E::UtfError(e)
@@ -152,7 +158,7 @@ fn parse_leader(byte: &[u8]) -> Result<Leader> {
 }
 
 // TODO: Change this function to use exact_chunk when it is stable
-fn parse_directory(byte: &[u8], leader: Leader) -> Result<Vec<DirectoryEntry>> {
+fn parse_directory(byte: &[u8], leader: &Leader) -> Result<Vec<DirectoryEntry>> {
     let chunksize = (leader.ftf + leader.flf + leader.fpf) as usize;
     let dir_iter = byte.chunks(chunksize);
     let mut directories: Vec<DirectoryEntry> = Vec::new();
@@ -170,6 +176,45 @@ fn parse_directory(byte: &[u8], leader: Leader) -> Result<Vec<DirectoryEntry>> {
     }
 
     Ok(directories)
+}
+
+struct DDR {
+    leader: Leader,
+    directory: Vec<DirectoryEntry>,
+    // file_control_field,
+}
+
+pub struct Catalog<R: Read> {
+    ddr: DDR, // Data Descriptive Record
+    rdr: R,   // reader to ask for Data Records
+}
+
+impl<R: Read> Catalog<R> {
+    pub fn new(mut cat_rdr: R) -> Result<Catalog<R>> {
+        // Read the length of the DDR, stored in the first 5 bytes
+        let mut ddr_bytes = [0; 5];
+        cat_rdr.read(&mut ddr_bytes)?;
+        let ddr_length: usize = from_utf8(&ddr_bytes)?.parse()?;
+
+        // Read the rest of the DDR
+        let mut ddr_data = vec![0; ddr_length - 5];
+        cat_rdr.read_exact(&mut ddr_data)?;
+
+        //Concatenate to make complete ddr data
+        let mut ddr_bytes = ddr_bytes.to_vec();
+        ddr_bytes.append(&mut ddr_data);
+        let ddr = parse_ddr(&ddr_bytes)?;
+        Ok(Catalog {
+            ddr: ddr,
+            rdr: cat_rdr,
+        })
+    }
+}
+
+fn parse_ddr(ddr_bytes: &Vec<u8>) -> Result<DDR> {
+    let leader = parse_leader(&ddr_bytes[..24])?;
+    let directory = parse_directory(&ddr_bytes[24..], &leader)?;
+    Ok(DDR { leader, directory })
 }
 
 #[cfg(test)]
@@ -194,7 +239,7 @@ mod test {
         }
     }
 
-    fn get_test_direcory() -> Vec<DirectoryEntry> {
+    fn get_test_directory() -> Vec<DirectoryEntry> {
         vec![
             DirectoryEntry {
                 id: "0000".to_string(),
@@ -226,17 +271,11 @@ mod test {
     fn test_parse_directory() {
         let leader = get_test_leader();
         let directory = "0000019000000010440019CATD1200063".as_bytes();
-        let expected = get_test_direcory();
-        let actual = parse_directory(directory, leader).unwrap();
+        let expected = get_test_directory();
+        let actual = parse_directory(directory, &leader).unwrap();
         assert_eq!(actual, expected)
     }
 
     #[test]
-    fn test_parse_file_control_field() {
-        let file_control_field = format!(
-            "{}{}{}{}",
-            "0000;&   ", UNIT_SEPARATOR, "0001CATD", RECORD_SEPARATOR
-        );
-        assert_eq!()
-    }
+    fn test_parse_data_descriptive_field() {}
 }
