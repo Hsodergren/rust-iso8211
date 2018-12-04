@@ -91,6 +91,19 @@ struct FileControlField {
     dtc: DataTypeCode,
 }
 
+#[derive(Debug, PartialEq)]
+struct FieldControls {
+    dsc: DataStructureCode,
+    dtc: DataTypeCode,
+    aux: String, // Auxilliary controls
+    prt: String,
+    tes: TruncEscSeq,
+}
+
+// Data Descriptive Field Entry
+#[derive(Debug, PartialEq)]
+struct DDFEntry {}
+
 pub type Result<T> = std::result::Result<T, E>;
 
 #[derive(Debug)]
@@ -178,10 +191,27 @@ fn parse_directory(byte: &[u8], leader: &Leader) -> Result<Vec<DirectoryEntry>> 
     Ok(directories)
 }
 
+fn parse_field_controls(byte: &[u8]) -> Result<FieldControls> {
+    let dsc = DataStructureCode::new(from_utf8(&byte[0..1])?.parse()?)?;
+    let dtc = DataTypeCode::new(from_utf8(&byte[1..2])?.parse()?)?;
+    let aux = from_utf8(&byte[2..4])?.to_string();
+    let prt = from_utf8(&byte[4..6])?.to_string();
+    let tes = TruncEscSeq::new(from_utf8(&byte[6..])?.to_string())?;
+
+    Ok(FieldControls {
+        dsc,
+        dtc,
+        aux,
+        prt,
+        tes,
+    })
+}
+
 struct DDR {
     leader: Leader,
     directory: Vec<DirectoryEntry>,
     // file_control_field,
+    data_descriptive_field: Vec<DDFEntry>,
 }
 
 pub struct Catalog<R: Read> {
@@ -214,7 +244,13 @@ impl<R: Read> Catalog<R> {
 fn parse_ddr(ddr_bytes: &Vec<u8>) -> Result<DDR> {
     let leader = parse_leader(&ddr_bytes[..24])?;
     let directory = parse_directory(&ddr_bytes[24..], &leader)?;
-    Ok(DDR { leader, directory })
+    let data_descriptive_field = Vec::new();
+
+    Ok(DDR {
+        leader,
+        directory,
+        data_descriptive_field,
+    })
 }
 
 #[cfg(test)]
@@ -259,6 +295,15 @@ mod test {
         ]
     }
 
+    fn get_test_field_controls() -> FieldControls {
+        FieldControls {
+            dsc: DataStructureCode::LS,
+            dtc: DataTypeCode::MDT,
+            aux: "00".to_string(),
+            prt: ";&".to_string(),
+            tes: TruncEscSeq::LE1,
+        }
+    }
     #[test]
     fn test_parse_leader() {
         let leader = "002413LE1 0900058 ! 3404".as_bytes();
@@ -273,9 +318,14 @@ mod test {
         let directory = "0000019000000010440019CATD1200063".as_bytes();
         let expected = get_test_directory();
         let actual = parse_directory(directory, &leader).unwrap();
-        assert_eq!(actual, expected)
+        assert_eq!(actual, expected);
     }
 
     #[test]
-    fn test_parse_data_descriptive_field() {}
+    fn test_parse_field_controls() {
+        let field_controls = "1600;&-A ".as_bytes();
+        let expected = get_test_field_controls();
+        let actual = parse_field_controls(field_controls).unwrap();
+        assert_eq!(actual, expected);
+    }
 }
