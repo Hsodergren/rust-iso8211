@@ -24,9 +24,9 @@ struct Leader {
 
 #[derive(Debug, PartialEq)]
 struct DirectoryEntry {
-    id: String,  // The Id of the field
-    length: u32, // The length of the field in bytes
-    offset: u32, // The offset in bytes form the start of the record
+    id: String,    // The Id of the field
+    length: usize, // The length of the field in bytes
+    offset: usize, // The offset in bytes form the start of the record
 }
 
 #[derive(Debug, PartialEq)]
@@ -96,13 +96,15 @@ struct FieldControls {
     dsc: DataStructureCode,
     dtc: DataTypeCode,
     aux: String, // Auxilliary controls
-    prt: String,
+    prt: String, // Printable graphics
     tes: TruncEscSeq,
 }
 
 // Data Descriptive Field Entry
 #[derive(Debug, PartialEq)]
-struct DDFEntry {}
+struct DDFEntry {
+    fc: FieldControls,
+}
 
 pub type Result<T> = std::result::Result<T, E>;
 
@@ -207,6 +209,21 @@ fn parse_field_controls(byte: &[u8]) -> Result<FieldControls> {
     })
 }
 
+fn parse_array_descriptors(byte: &[u8]) -> Result<Vec<String>> {
+    Ok(from_utf8(&byte[..])?
+        .split("!")
+        .map(|s| String::from(s))
+        .collect::<Vec<String>>())
+}
+
+fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
+    let mut cursor = std::io::Cursor::new(byte);
+    let mut fc_buffer = [0; 10];
+    cursor.read_exact(&mut fc_buffer);
+    let fc = parse_field_controls(&fc_buffer)?;
+    Ok(DDFEntry { fc })
+}
+
 struct DDR {
     leader: Leader,
     directory: Vec<DirectoryEntry>,
@@ -224,9 +241,9 @@ impl<R: Read> Catalog<R> {
         // Read the length of the DDR, stored in the first 5 bytes
         let mut ddr_bytes = [0; 5];
         cat_rdr.read(&mut ddr_bytes)?;
-        let ddr_length: usize = from_utf8(&ddr_bytes)?.parse()?;
 
         // Read the rest of the DDR
+        let ddr_length: usize = from_utf8(&ddr_bytes)?.parse()?;
         let mut ddr_data = vec![0; ddr_length - 5];
         cat_rdr.read_exact(&mut ddr_data)?;
 
@@ -327,5 +344,17 @@ mod test {
         let expected = get_test_field_controls();
         let actual = parse_field_controls(field_controls).unwrap();
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_array_descriptor() {
+        let array_descriptor =
+            "RCNM!RCID!FILE!LFIL!VOLM!IMPL!SLAT!WLON!NLAT!ELON!CRCS!COMT".as_bytes();
+        let expected = vec![
+            "RCNM", "RCID", "FILE", "LFIL", "VOLM", "IMPL", "SLAT", "WLON", "NLAT", "ELON", "CRCS",
+            "COMT",
+        ];
+        let actual = parse_array_descriptors(array_descriptor).unwrap();
+        assert_eq!(actual, expected)
     }
 }
