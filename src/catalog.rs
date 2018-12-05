@@ -1,3 +1,4 @@
+use data_parser::{Data, ParseData, ParseType};
 use std::io::Read;
 use std::str::{from_utf8, Utf8Error};
 
@@ -216,6 +217,17 @@ fn parse_array_descriptors(byte: &[u8]) -> Result<Vec<String>> {
         .collect::<Vec<String>>())
 }
 
+fn parse_format_controls(byte: &[u8]) -> Result<Vec<ParseData>> {
+    // Remove surrounding parenthesies and create ParseDatas
+    Ok(from_utf8(&byte[1..byte.len() - 1])?
+        .split(",")
+        .flat_map(|fc| {
+            let (n, d) = ParseData::new(fc).unwrap();
+            std::iter::repeat(d).take(n)
+        })
+        .collect())
+}
+
 fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
     let mut cursor = std::io::Cursor::new(byte);
     let mut fc_buffer = [0; 10];
@@ -321,6 +333,17 @@ mod test {
             tes: TruncEscSeq::LE1,
         }
     }
+
+    fn get_test_format_controls() -> Vec<ParseData> {
+        vec![
+            ParseData::Fixed(ParseType::String, 2),
+            ParseData::Fixed(ParseType::Integer, 10),
+            ParseData::Fixed(ParseType::Integer, 10),
+            ParseData::Variable(ParseType::Float),
+            ParseData::Variable(ParseType::Float),
+        ]
+    }
+
     #[test]
     fn test_parse_leader() {
         let leader = "002413LE1 0900058 ! 3404".as_bytes();
@@ -355,6 +378,14 @@ mod test {
             "COMT",
         ];
         let actual = parse_array_descriptors(array_descriptor).unwrap();
-        assert_eq!(actual, expected)
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_format_controls() {
+        let format_controls = "(A(2),2I(10),2R)".as_bytes();
+        let expected = get_test_format_controls();
+        let actual = parse_format_controls(format_controls).unwrap();
+        assert_eq!(actual, expected);
     }
 }
