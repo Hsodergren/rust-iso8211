@@ -80,7 +80,7 @@ impl TruncEscSeq {
         match value.as_ref() {
             "   " => Ok(TruncEscSeq::LE0),
             "-A " => Ok(TruncEscSeq::LE1),
-            "%/@" => Ok(TruncEscSeq::LE2),
+            "%/A" => Ok(TruncEscSeq::LE2),
             _ => Err(E::BadTruncEscSeq()),
         }
     }
