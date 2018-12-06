@@ -2,8 +2,8 @@ use data_parser::{Data, ParseData, ParseType};
 use std::io::Read;
 use std::str::{from_utf8, Utf8Error};
 
-const RECORD_SEPARATOR: &str = "\u{1E}";
-const UNIT_SEPARATOR: &str = "\u{1F}";
+const RECORD_SEPARATOR: u8 = 0x1e;
+const UNIT_SEPARATOR: u8 = 0x1f;
 
 #[derive(Debug, PartialEq)]
 struct Leader {
@@ -104,7 +104,9 @@ struct FieldControls {
 // Data Descriptive Field Entry
 #[derive(Debug, PartialEq)]
 struct DDFEntry {
-    fc: FieldControls,
+    fic: FieldControls,
+    name: String,
+    foc: Vec<(String, ParseData)>,
 }
 
 pub type Result<T> = std::result::Result<T, E>;
@@ -115,6 +117,8 @@ pub enum E {
     BadDataTypeCode(),
     BadDirectoryData(),
     BadTruncEscSeq(),
+    EmptyArrayDescriptor,
+    InvalidHeader,
     IOError(std::io::Error),
     ParseError(std::string::ParseError),
     ParseIntError(std::num::ParseIntError),
@@ -183,7 +187,6 @@ fn parse_directory(byte: &[u8], leader: &Leader) -> Result<Vec<DirectoryEntry>> 
         if d.len() != chunksize {
             return Err(E::BadDirectoryData());
         }
-        let cont: String = from_utf8(&d[..])?.parse()?;
         let id = from_utf8(&d[..leader.ftf])?.parse()?;
         let length = from_utf8(&d[leader.ftf..leader.ftf + leader.flf])?.parse()?;
         let offset = from_utf8(&d[leader.ftf + leader.flf..])?.parse()?;
@@ -211,10 +214,14 @@ fn parse_field_controls(byte: &[u8]) -> Result<FieldControls> {
 }
 
 fn parse_array_descriptors(byte: &[u8]) -> Result<Vec<String>> {
-    Ok(from_utf8(&byte[..])?
-        .split("!")
-        .map(|s| String::from(s))
-        .collect::<Vec<String>>())
+    if byte.len() == 0 {
+        Err(E::EmptyArrayDescriptor)
+    } else {
+        Ok(from_utf8(&byte[..])?
+            .split("!")
+            .map(|s| String::from(s))
+            .collect::<Vec<String>>())
+    }
 }
 
 fn parse_format_controls(byte: &[u8]) -> Result<Vec<ParseData>> {
@@ -228,12 +235,35 @@ fn parse_format_controls(byte: &[u8]) -> Result<Vec<ParseData>> {
         .collect())
 }
 
-fn parse_ddf(byte: &[u8], dir: Vec<DirectoryEntry>) -> Result<DDFEntry> {
-    let mut cursor = std::io::Cursor::new(byte);
-    let mut fc_buffer = [0; 10];
-    cursor.read_exact(&mut fc_buffer);
-    let fc = parse_field_controls(&fc_buffer)?;
-    Ok(DDFEntry { fc })
+fn parse_ddfs(byte: &[u8], dirs: &[DirectoryEntry]) -> Result<Vec<DDFEntry>> {
+    // We should absolutely handle the file control field... later... but for now we skip it.
+    dirs.iter()
+        .skip(1)
+        .map(|dir| {
+            let s = dir.offset;
+            //  take -1 to remove the record separator from the slice
+            let e = dir.offset + dir.length - 1;
+            parse_ddf(&byte[s..e])
+        })
+        .collect()
+}
+
+fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
+    let parts = byte.split(|&b| b == UNIT_SEPARATOR).collect::<Vec<&[u8]>>();
+    let (fic_bytes, name_bytes) = parts.get(0).ok_or(E::InvalidHeader)?.split_at(9);
+    let fic = parse_field_controls(fic_bytes)?;
+    let name: String = from_utf8(name_bytes)?.parse()?;
+    let array_desc = parse_array_descriptors(parts.get(1).ok_or(E::InvalidHeader)?)?;
+    let data_parser = parse_format_controls(parts.get(1).ok_or(E::InvalidHeader)?)?;
+    if array_desc.len() == data_parser.len() {
+        let foc = array_desc
+            .into_iter()
+            .zip(data_parser.into_iter())
+            .collect();
+        Ok(DDFEntry { fic, name, foc })
+    } else {
+        Err(E::InvalidHeader)
+    }
 }
 
 struct DDR {
@@ -270,10 +300,14 @@ impl<R: Read> Catalog<R> {
     }
 }
 
-fn parse_ddr(ddr_bytes: &Vec<u8>) -> Result<DDR> {
+fn parse_ddr(ddr_bytes: &[u8]) -> Result<DDR> {
     let leader = parse_leader(&ddr_bytes[..24])?;
-    let dirs = parse_directory(&ddr_bytes[24..], &leader)?;
-    let data_descriptive_fields = vec![]; //(&ddr_bytes[);
+    let field_term = match ddr_bytes.iter().position(|&b| b == RECORD_SEPARATOR) {
+        Some(index) => index,
+        None => return Err(E::BadDirectoryData()),
+    };
+    let dirs = parse_directory(&ddr_bytes[24..field_term], &leader)?;
+    let data_descriptive_fields = parse_ddfs(&ddr_bytes[24 + field_term + 1..], &dirs)?;
 
     Ok(DDR {
         leader,
@@ -379,6 +413,12 @@ mod test {
         ];
         let actual = parse_array_descriptors(array_descriptor).unwrap();
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_array_descriptor_with_empty() {
+        let array_descriptor = &[0u8; 0];
+        assert!(parse_array_descriptors(array_descriptor).is_err())
     }
 
     #[test]
