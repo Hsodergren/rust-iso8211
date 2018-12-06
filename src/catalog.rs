@@ -118,6 +118,7 @@ pub enum E {
     IOError(std::io::Error),
     ParseError(std::string::ParseError),
     ParseIntError(std::num::ParseIntError),
+    UnParsable(String),
     UtfError(std::str::Utf8Error),
 }
 
@@ -183,7 +184,6 @@ fn parse_directory(byte: &[u8], leader: &Leader) -> Result<Vec<DirectoryEntry>> 
             return Err(E::BadDirectoryData());
         }
         let cont: String = from_utf8(&d[..])?.parse()?;
-        println!("{}", cont);
         let id = from_utf8(&d[..leader.ftf])?.parse()?;
         let length = from_utf8(&d[leader.ftf..leader.ftf + leader.flf])?.parse()?;
         let offset = from_utf8(&d[leader.ftf + leader.flf..])?.parse()?;
@@ -220,15 +220,15 @@ fn parse_array_descriptors(byte: &[u8]) -> Result<Vec<String>> {
 fn parse_format_controls(byte: &[u8]) -> Result<Vec<ParseData>> {
     // Remove surrounding parenthesies and create ParseDatas
     Ok(from_utf8(&byte[1..byte.len() - 1])?
-        .split(",")
-        .flat_map(|fc| {
-            let (n, d) = ParseData::new(fc).unwrap();
-            std::iter::repeat(d).take(n)
-        })
+        .split(',')
+        .map(|fc| ParseData::new(fc))
+        .collect::<Result<Vec<(usize, ParseData)>>>()?
+        .into_iter()
+        .flat_map(|pd| std::iter::repeat(pd.1).take(pd.0))
         .collect())
 }
 
-fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
+fn parse_ddf(byte: &[u8], dir: Vec<DirectoryEntry>) -> Result<DDFEntry> {
     let mut cursor = std::io::Cursor::new(byte);
     let mut fc_buffer = [0; 10];
     cursor.read_exact(&mut fc_buffer);
@@ -238,9 +238,9 @@ fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
 
 struct DDR {
     leader: Leader,
-    directory: Vec<DirectoryEntry>,
+    dirs: Vec<DirectoryEntry>,
     // file_control_field,
-    data_descriptive_field: Vec<DDFEntry>,
+    data_descriptive_fields: Vec<DDFEntry>,
 }
 
 pub struct Catalog<R: Read> {
@@ -272,13 +272,13 @@ impl<R: Read> Catalog<R> {
 
 fn parse_ddr(ddr_bytes: &Vec<u8>) -> Result<DDR> {
     let leader = parse_leader(&ddr_bytes[..24])?;
-    let directory = parse_directory(&ddr_bytes[24..], &leader)?;
-    let data_descriptive_field = Vec::new();
+    let dirs = parse_directory(&ddr_bytes[24..], &leader)?;
+    let data_descriptive_fields = vec![]; //(&ddr_bytes[);
 
     Ok(DDR {
         leader,
-        directory,
-        data_descriptive_field,
+        dirs,
+        data_descriptive_fields,
     })
 }
 

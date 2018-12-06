@@ -1,3 +1,4 @@
+use catalog::E;
 use regex::Regex;
 use std::io::Read;
 
@@ -27,12 +28,6 @@ pub enum Data {
     Float(f64),
 }
 
-#[derive(Debug, PartialEq)]
-pub enum E {
-    UnParsable(String),
-    UnknownDataType(char),
-}
-
 impl ParseData {
     pub(crate) fn new(s: &str) -> Result<(usize, ParseData), E> {
         match FIELD_REGEX.captures(s) {
@@ -54,7 +49,7 @@ impl ParseData {
         }
     }
 
-    pub fn parse<R: Read>(rdr: R) -> Result<Data, E> {
+    pub(crate) fn parse<R: Read>(rdr: R) -> Result<Data, E> {
         Ok(Data::Integer(5))
     }
 }
