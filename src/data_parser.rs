@@ -1,4 +1,4 @@
-use catalog::E;
+use crate::catalog::E;
 use regex::Regex;
 use std::io::Read;
 
@@ -49,7 +49,7 @@ impl ParseData {
         }
     }
 
-    pub(crate) fn parse<R: Read>(rdr: R) -> Result<Data, E> {
+    pub(crate) fn parse<R: Read>(&self, _rdr: R) -> Result<Data, E> {
         Ok(Data::Integer(5))
     }
 }

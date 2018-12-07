@@ -1,4 +1,4 @@
-use data_parser::{Data, ParseData, ParseType};
+use crate::data_parser::{Data, ParseData, ParseType};
 use std::io::Read;
 use std::str::{from_utf8, Utf8Error};
 
