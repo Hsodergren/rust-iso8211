@@ -76,8 +76,8 @@ enum TruncEscSeq {
     LE2, //Lexical Level 2
 }
 impl TruncEscSeq {
-    fn new(value: String) -> Result<TruncEscSeq> {
-        match value.as_ref() {
+    fn new(value: &str) -> Result<TruncEscSeq> {
+        match value {
             "   " => Ok(TruncEscSeq::LE0),
             "-A " => Ok(TruncEscSeq::LE1),
             "%/A" => Ok(TruncEscSeq::LE2),
@@ -202,7 +202,7 @@ fn parse_field_controls(byte: &[u8]) -> Result<FieldControls> {
     let dtc = DataTypeCode::new(from_utf8(&byte[1..2])?.parse()?)?;
     let aux = from_utf8(&byte[2..4])?.to_string();
     let prt = from_utf8(&byte[4..6])?.to_string();
-    let tes = TruncEscSeq::new(from_utf8(&byte[6..])?.to_string())?;
+    let tes = TruncEscSeq::new(from_utf8(&byte[6..])?)?;
 
     Ok(FieldControls {
         dsc,
@@ -214,12 +214,12 @@ fn parse_field_controls(byte: &[u8]) -> Result<FieldControls> {
 }
 
 fn parse_array_descriptors(byte: &[u8]) -> Result<Vec<String>> {
-    if byte.len() == 0 {
+    if byte.is_empty() {
         Err(E::EmptyArrayDescriptor)
     } else {
         Ok(from_utf8(&byte[..])?
-            .split("!")
-            .map(|s| String::from(s))
+            .split('!')
+            .map(String::from)
             .collect::<Vec<String>>())
     }
 }
@@ -279,24 +279,21 @@ pub struct Catalog<R: Read> {
 }
 
 impl<R: Read> Catalog<R> {
-    pub fn new(mut cat_rdr: R) -> Result<Catalog<R>> {
+    pub fn new(mut rdr: R) -> Result<Catalog<R>> {
         // Read the length of the DDR, stored in the first 5 bytes
         let mut ddr_bytes = [0; 5];
-        cat_rdr.read(&mut ddr_bytes)?;
+        rdr.read_exact(&mut ddr_bytes)?;
 
         // Read the rest of the DDR
         let ddr_length: usize = from_utf8(&ddr_bytes)?.parse()?;
         let mut ddr_data = vec![0; ddr_length - 5];
-        cat_rdr.read_exact(&mut ddr_data)?;
+        rdr.read_exact(&mut ddr_data)?;
 
         //Concatenate to make complete ddr data
         let mut ddr_bytes = ddr_bytes.to_vec();
         ddr_bytes.append(&mut ddr_data);
         let ddr = parse_ddr(&ddr_bytes)?;
-        Ok(Catalog {
-            ddr: ddr,
-            rdr: cat_rdr,
-        })
+        Ok(Catalog { ddr, rdr })
     }
 }
 
