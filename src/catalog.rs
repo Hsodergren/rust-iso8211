@@ -117,7 +117,7 @@ pub enum E {
     BadDataTypeCode(),
     BadDirectoryData(),
     BadTruncEscSeq(),
-    EmptyArrayDescriptor,
+    EmptyFormatControls,
     InvalidHeader,
     IOError(std::io::Error),
     ParseError(std::string::ParseError),
@@ -221,7 +221,7 @@ fn parse_field_controls(byte: &[u8]) -> Result<FieldControls> {
 
 fn parse_array_descriptors(byte: &[u8]) -> Result<Vec<String>> {
     if byte.is_empty() {
-        Err(E::EmptyArrayDescriptor)
+        Ok(vec![String::from("DRID")])
     } else {
         Ok(from_utf8(&byte[..])?
             .split('!')
@@ -231,14 +231,18 @@ fn parse_array_descriptors(byte: &[u8]) -> Result<Vec<String>> {
 }
 
 fn parse_format_controls(byte: &[u8]) -> Result<Vec<ParseData>> {
-    // Remove surrounding parenthesies and create ParseDatas
-    Ok(from_utf8(&byte[1..byte.len() - 1])?
-        .split(',')
-        .map(|fc| ParseData::new(fc))
-        .collect::<Result<Vec<(usize, ParseData)>>>()?
-        .into_iter()
-        .flat_map(|pd| std::iter::repeat(pd.1).take(pd.0))
-        .collect())
+    if byte.len() < 2 {
+        Err(E::EmptyFormatControls)
+    } else {
+        // Remove surrounding parenthesies and create ParseDatas
+        Ok(from_utf8(&byte[1..byte.len() - 1])?
+            .split(',')
+            .map(|fc| ParseData::new(fc))
+            .collect::<Result<Vec<(usize, ParseData)>>>()?
+            .into_iter()
+            .flat_map(|pd| std::iter::repeat(pd.1).take(pd.0))
+            .collect())
+    }
 }
 
 fn parse_ddfs(byte: &[u8], dirs: &[DirectoryEntry]) -> Result<Vec<DDFEntry>> {
@@ -421,9 +425,9 @@ mod test {
     }
 
     #[test]
-    fn test_parse_array_descriptor_with_empty() {
+    fn test_parse_format_controls_with_empty() {
         let array_descriptor = &[0u8; 0];
-        assert!(parse_array_descriptors(array_descriptor).is_err())
+        assert!(parse_format_controls(array_descriptor).is_err())
     }
 
     #[test]
