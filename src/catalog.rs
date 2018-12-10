@@ -307,12 +307,12 @@ impl<R: Read> Catalog<R> {
 
 fn parse_ddr(ddr_bytes: &[u8]) -> Result<DDR> {
     let leader = parse_leader(&ddr_bytes[..24])?;
-    let field_term = match ddr_bytes.iter().position(|&b| b == RECORD_SEPARATOR) {
+    let field_area_idx = match ddr_bytes.iter().position(|&b| b == RECORD_SEPARATOR) {
         Some(index) => index,
         None => return Err(E::BadDirectoryData()),
     };
-    let dirs = parse_directory(&ddr_bytes[24..field_term], &leader)?;
-    let data_descriptive_fields = parse_ddfs(&ddr_bytes[24 + field_term + 1..], &dirs)?;
+    let dirs = parse_directory(&ddr_bytes[24..field_area_idx], &leader)?;
+    let data_descriptive_fields = parse_ddfs(&ddr_bytes[field_area_idx + 1..], &dirs)?;
 
     Ok(DDR {
         leader,
