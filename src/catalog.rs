@@ -122,6 +122,7 @@ pub enum E {
     IOError(std::io::Error),
     ParseError(std::string::ParseError),
     ParseIntError(std::num::ParseIntError),
+    ParseFloatError(std::num::ParseFloatError),
     UnParsable(String),
     UtfError(std::str::Utf8Error),
 }
@@ -144,6 +145,11 @@ impl From<std::string::ParseError> for E {
 impl From<std::num::ParseIntError> for E {
     fn from(e: std::num::ParseIntError) -> E {
         E::ParseIntError(e)
+    }
+}
+impl From<std::num::ParseFloatError> for E {
+    fn from(e: std::num::ParseFloatError) -> E {
+        E::ParseFloatError(e)
     }
 }
 

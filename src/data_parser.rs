@@ -1,7 +1,8 @@
 use crate::catalog::E;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::io::Read;
+use std::io::prelude::*;
+use std::io::Cursor;
 
 lazy_static! {
     // Maybe a number folowed by A,I,R followed by maybe a parenthesied number
@@ -50,8 +51,26 @@ impl ParseData {
         }
     }
 
-    pub(crate) fn parse<R: Read>(&self, _rdr: R) -> Result<Data, E> {
-        Ok(Data::Integer(5))
+    pub(crate) fn parse<R: BufRead>(&self, mut rdr: R) -> Result<Data, E> {
+        let (d, t) = match &self {
+            ParseData::Fixed(t, size) => {
+                let mut data = vec![0; *size];
+                rdr.read_exact(&mut data)?;
+                (data, t)
+            }
+            ParseData::Variable(t) => {
+                let mut data = Vec::new();
+                rdr.read_until(0x1f, &mut data)?;
+                (Vec::from(&data[..data.len() - 1]), t)
+            }
+        };
+        println!("{:?}", d);
+        let d = std::str::from_utf8(&d)?;
+        match t {
+            ParseType::String => Ok(Data::String(d.parse()?)),
+            ParseType::Integer => Ok(Data::Integer(d.parse()?)),
+            ParseType::Float => Ok(Data::Float(d.parse()?)),
+        }
     }
 }
 
@@ -96,6 +115,52 @@ mod tests {
         assert_eq!(
             ParseData::new("1R(5)").unwrap(),
             (1, ParseData::Fixed(ParseType::Float, 5))
+        );
+    }
+
+    #[test]
+    fn read_data() {
+        assert_eq!(
+            ParseData::Fixed(ParseType::Integer, 5)
+                .parse(Cursor::new("00001".as_bytes()))
+                .unwrap(),
+            Data::Integer(1)
+        );
+        assert_eq!(
+            ParseData::Fixed(ParseType::String, 5)
+                .parse(Cursor::new("Hejsa".as_bytes()))
+                .unwrap(),
+            Data::String(String::from("Hejsa"))
+        );
+        assert_eq!(
+            ParseData::Fixed(ParseType::Float, 5)
+                .parse(Cursor::new("0.005".as_bytes()))
+                .unwrap(),
+            Data::Float(0.005)
+        );
+        assert_eq!(
+            ParseData::Variable(ParseType::Integer)
+                .parse(Cursor::new(&[
+                    '0' as u8, '0' as u8, '0' as u8, '0' as u8, '1' as u8, 0x1f
+                ]))
+                .unwrap(),
+            Data::Integer(1)
+        );
+        assert_eq!(
+            ParseData::Variable(ParseType::String)
+                .parse(Cursor::new(&[
+                    'H' as u8, 'e' as u8, 'j' as u8, 's' as u8, 'a' as u8, 0x1f
+                ]))
+                .unwrap(),
+            Data::String(String::from("Hejsa"))
+        );
+        assert_eq!(
+            ParseData::Variable(ParseType::Float)
+                .parse(Cursor::new(&[
+                    '0' as u8, '.' as u8, '0' as u8, '0' as u8, '5' as u8, 0x1f
+                ]))
+                .unwrap(),
+            Data::Float(0.005)
         );
     }
 }
