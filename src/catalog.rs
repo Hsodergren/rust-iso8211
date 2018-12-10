@@ -260,7 +260,7 @@ fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
     let fic = parse_field_controls(fic_bytes)?;
     let name: String = from_utf8(name_bytes)?.parse()?;
     let array_desc = parse_array_descriptors(parts.get(1).ok_or(E::InvalidHeader)?)?;
-    let data_parser = parse_format_controls(parts.get(1).ok_or(E::InvalidHeader)?)?;
+    let data_parser = parse_format_controls(parts.get(2).ok_or(E::InvalidHeader)?)?;
     if array_desc.len() == data_parser.len() {
         let foc = array_desc
             .into_iter()
@@ -272,6 +272,7 @@ fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
     }
 }
 
+#[derive(Debug)]
 struct DDR {
     leader: Leader,
     dirs: Vec<DirectoryEntry>,
@@ -279,6 +280,7 @@ struct DDR {
     data_descriptive_fields: Vec<DDFEntry>,
 }
 
+#[derive(Debug)]
 pub struct Catalog<R: Read> {
     ddr: DDR, // Data Descriptive Record
     rdr: R,   // reader to ask for Data Records
