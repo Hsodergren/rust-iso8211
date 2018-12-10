@@ -64,7 +64,6 @@ impl ParseData {
                 (Vec::from(&data[..data.len() - 1]), t)
             }
         };
-        println!("{:?}", d);
         let d = std::str::from_utf8(&d)?;
         match t {
             ParseType::String => Ok(Data::String(d.parse()?)),
