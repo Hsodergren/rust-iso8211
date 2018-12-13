@@ -1,4 +1,4 @@
-use crate::catalog::E;
+use crate::catalog::{E, UNIT_SEPARATOR};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::io::prelude::*;
@@ -60,7 +60,7 @@ impl ParseData {
             }
             ParseData::Variable(t) => {
                 let mut data = Vec::new();
-                rdr.read_until(0x1f, &mut data)?;
+                rdr.read_until(UNIT_SEPARATOR, &mut data)?;
                 (Vec::from(&data[..data.len() - 1]), t)
             }
         };
@@ -140,7 +140,12 @@ mod tests {
         assert_eq!(
             ParseData::Variable(ParseType::Integer)
                 .parse(Cursor::new(&[
-                    '0' as u8, '0' as u8, '0' as u8, '0' as u8, '1' as u8, 0x1f
+                    '0' as u8,
+                    '0' as u8,
+                    '0' as u8,
+                    '0' as u8,
+                    '1' as u8,
+                    UNIT_SEPARATOR,
                 ]))
                 .unwrap(),
             Data::Integer(1)
@@ -148,7 +153,12 @@ mod tests {
         assert_eq!(
             ParseData::Variable(ParseType::String)
                 .parse(Cursor::new(&[
-                    'H' as u8, 'e' as u8, 'j' as u8, 's' as u8, 'a' as u8, 0x1f
+                    'H' as u8,
+                    'e' as u8,
+                    'j' as u8,
+                    's' as u8,
+                    'a' as u8,
+                    UNIT_SEPARATOR,
                 ]))
                 .unwrap(),
             Data::String(String::from("Hejsa"))
@@ -156,7 +166,12 @@ mod tests {
         assert_eq!(
             ParseData::Variable(ParseType::Float)
                 .parse(Cursor::new(&[
-                    '0' as u8, '.' as u8, '0' as u8, '0' as u8, '5' as u8, 0x1f
+                    '0' as u8,
+                    '.' as u8,
+                    '0' as u8,
+                    '0' as u8,
+                    '5' as u8,
+                    UNIT_SEPARATOR,
                 ]))
                 .unwrap(),
             Data::Float(0.005)

@@ -2,8 +2,8 @@ use crate::data_parser::{Data, ParseData, ParseType};
 use std::io::Read;
 use std::str::{from_utf8, Utf8Error};
 
-const RECORD_SEPARATOR: u8 = 0x1e;
-const UNIT_SEPARATOR: u8 = 0x1f;
+pub(crate) const RECORD_SEPARATOR: u8 = 0x1e;
+pub(crate) const UNIT_SEPARATOR: u8 = 0x1f;
 
 #[derive(Debug, PartialEq)]
 struct Leader {
