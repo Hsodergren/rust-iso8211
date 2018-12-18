@@ -1,4 +1,4 @@
-use crate::catalog::{E, UNIT_SEPARATOR};
+use crate::catalog::{Result, E, UNIT_SEPARATOR};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::io::prelude::*;
@@ -31,7 +31,7 @@ pub enum Data {
 }
 
 impl ParseData {
-    pub(crate) fn new(s: &str) -> Result<(usize, ParseData), E> {
+    pub(crate) fn new(s: &str) -> Result<(usize, ParseData)> {
         match FIELD_REGEX.captures(s) {
             Some(cap) => {
                 let num = cap.get(1).map_or(1, |c| c.as_str().parse().unwrap());
@@ -47,11 +47,11 @@ impl ParseData {
                 });
                 Ok((num, pd))
             }
-            None => Err(E::UnParsable(String::from(s))),
+            None => Err(E::UnParsable(String::from(s)).into()),
         }
     }
 
-    pub(crate) fn parse<R: BufRead>(&self, mut rdr: R) -> Result<Data, E> {
+    pub(crate) fn parse<R: BufRead>(&self, mut rdr: R) -> Result<Data> {
         let (d, t) = match &self {
             ParseData::Fixed(t, size) => {
                 let mut data = vec![0; *size];

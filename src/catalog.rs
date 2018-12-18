@@ -1,6 +1,8 @@
 use crate::data_parser::{Data, ParseData, ParseType};
+use failure::{Error, Fail};
 use std::io::Read;
-use std::str::{from_utf8, Utf8Error};
+use std::str::from_utf8;
+use std::str::FromStr;
 
 pub(crate) const RECORD_SEPARATOR: u8 = 0x1e;
 pub(crate) const UNIT_SEPARATOR: u8 = 0x1f;
@@ -36,13 +38,14 @@ enum DataStructureCode {
     LS,  // Linear Structure
     MDS, // Multi-Dimensional structure
 }
-impl DataStructureCode {
-    fn new(value: u8) -> Result<DataStructureCode> {
+impl FromStr for DataStructureCode {
+    type Err = Error;
+    fn from_str(value: &str) -> Result<DataStructureCode> {
         match value {
-            0 => Ok(DataStructureCode::SDI),
-            1 => Ok(DataStructureCode::LS),
-            2 => Ok(DataStructureCode::MDS),
-            _ => Err(E::BadDataStructureCode()),
+            "0" => Ok(DataStructureCode::SDI),
+            "1" => Ok(DataStructureCode::LS),
+            "2" => Ok(DataStructureCode::MDS),
+            _ => Err(E::BadDataStructureCode.into()),
         }
     }
 }
@@ -55,15 +58,16 @@ enum DataTypeCode {
     BF,  // Binary Form
     MDT, // Mixed Data Types
 }
-impl DataTypeCode {
-    fn new(value: u8) -> Result<DataTypeCode> {
+impl FromStr for DataTypeCode {
+    type Err = Error;
+    fn from_str(value: &str) -> Result<DataTypeCode> {
         match value {
-            0 => Ok(DataTypeCode::CS),
-            1 => Ok(DataTypeCode::IP),
-            2 => Ok(DataTypeCode::EP),
-            5 => Ok(DataTypeCode::BF),
-            6 => Ok(DataTypeCode::MDT),
-            _ => Err(E::BadDataTypeCode()),
+            "0" => Ok(DataTypeCode::CS),
+            "1" => Ok(DataTypeCode::IP),
+            "2" => Ok(DataTypeCode::EP),
+            "5" => Ok(DataTypeCode::BF),
+            "6" => Ok(DataTypeCode::MDT),
+            _ => Err(E::BadDataTypeCode.into()),
         }
     }
 }
@@ -75,13 +79,14 @@ enum TruncEscSeq {
     LE1, //Lexical Level 1
     LE2, //Lexical Level 2
 }
-impl TruncEscSeq {
-    fn new(value: &str) -> Result<TruncEscSeq> {
+impl FromStr for TruncEscSeq {
+    type Err = Error;
+    fn from_str(value: &str) -> Result<TruncEscSeq> {
         match value {
             "   " => Ok(TruncEscSeq::LE0),
             "-A " => Ok(TruncEscSeq::LE1),
             "%/A" => Ok(TruncEscSeq::LE2),
-            _ => Err(E::BadTruncEscSeq()),
+            _ => Err(E::BadTruncEscSeq.into()),
         }
     }
 }
@@ -109,49 +114,62 @@ struct DDFEntry {
     foc: Vec<(String, ParseData)>,
 }
 
-pub type Result<T> = std::result::Result<T, E>;
+pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 pub enum E {
-    BadDataStructureCode(),
-    BadDataTypeCode(),
-    BadDirectoryData(),
-    BadTruncEscSeq(),
+    #[fail(display = "Bad Data Structure Code")]
+    BadDataStructureCode,
+    #[fail(display = "Bad Data Structure Code")]
+    BadDataTypeCode,
+    #[fail(display = "Bad Data Structure Code")]
+    BadDirectoryData,
+    #[fail(display = "Bad Data Structure Code")]
+    BadTruncEscSeq,
+    #[fail(display = "Bad Data Structure Code")]
     EmptyFormatControls,
+    #[fail(display = "Bad Data Structure Code")]
     InvalidHeader,
+    #[fail(display = "Bad Data Structure Code")]
     IOError(std::io::Error),
+    #[fail(display = "Bad Data Structure Code")]
     ParseError(std::string::ParseError),
+    #[fail(display = "Bad Data Structure Code")]
     ParseIntError(std::num::ParseIntError),
+    #[fail(display = "Bad Data Structure Code")]
     ParseFloatError(std::num::ParseFloatError),
+    #[fail(display = "Bad Data Structure Code")]
     UnParsable(String),
+    #[fail(display = "Bad Data Structure Code")]
     UtfError(std::str::Utf8Error),
 }
 
-impl From<std::io::Error> for E {
-    fn from(e: std::io::Error) -> E {
-        E::IOError(e)
-    }
-}
-impl From<std::str::Utf8Error> for E {
-    fn from(e: Utf8Error) -> E {
-        E::UtfError(e)
-    }
-}
-impl From<std::string::ParseError> for E {
-    fn from(e: std::string::ParseError) -> E {
-        E::ParseError(e)
-    }
-}
-impl From<std::num::ParseIntError> for E {
-    fn from(e: std::num::ParseIntError) -> E {
-        E::ParseIntError(e)
-    }
-}
-impl From<std::num::ParseFloatError> for E {
-    fn from(e: std::num::ParseFloatError) -> E {
-        E::ParseFloatError(e)
-    }
-}
+//
+//impl From<std::io::Error> for E {
+//fn from(e: std::io::Error) -> E {
+//E::IOError(e)
+//}
+//}
+//impl From<std::str::Utf8Error> for E {
+//fn from(e: Utf8Error) -> E {
+//E::UtfError(e)
+//}
+//}
+//impl From<std::string::ParseError> for E {
+//fn from(e: std::string::ParseError) -> E {
+//E::ParseError(e)
+//}
+//}
+//impl From<std::num::ParseIntError> for E {
+//fn from(e: std::num::ParseIntError) -> E {
+//E::ParseIntError(e)
+//}
+//}
+//impl From<std::num::ParseFloatError> for E {
+//fn from(e: std::num::ParseFloatError) -> E {
+//E::ParseFloatError(e)
+//}
+//}
 
 fn parse_leader(byte: &[u8]) -> Result<Leader> {
     let rl = std::str::from_utf8(&byte[..5])?.parse()?;
@@ -191,7 +209,7 @@ fn parse_directory(byte: &[u8], leader: &Leader) -> Result<Vec<DirectoryEntry>> 
     let mut directories: Vec<DirectoryEntry> = Vec::new();
     for d in dir_iter {
         if d.len() != chunksize {
-            return Err(E::BadDirectoryData());
+            return Err(E::BadDirectoryData.into());
         }
         let id = from_utf8(&d[..leader.ftf])?.parse()?;
         let length = from_utf8(&d[leader.ftf..leader.ftf + leader.flf])?.parse()?;
@@ -204,11 +222,11 @@ fn parse_directory(byte: &[u8], leader: &Leader) -> Result<Vec<DirectoryEntry>> 
 }
 
 fn parse_field_controls(byte: &[u8]) -> Result<FieldControls> {
-    let dsc = DataStructureCode::new(from_utf8(&byte[0..1])?.parse()?)?;
-    let dtc = DataTypeCode::new(from_utf8(&byte[1..2])?.parse()?)?;
+    let dsc = from_utf8(&byte[0..1])?.parse()?;
+    let dtc = from_utf8(&byte[1..2])?.parse()?;
     let aux = from_utf8(&byte[2..4])?.to_string();
     let prt = from_utf8(&byte[4..6])?.to_string();
-    let tes = TruncEscSeq::new(from_utf8(&byte[6..])?)?;
+    let tes = from_utf8(&byte[6..])?.parse()?;
 
     Ok(FieldControls {
         dsc,
@@ -232,7 +250,7 @@ fn parse_array_descriptors(byte: &[u8]) -> Result<Vec<String>> {
 
 fn parse_format_controls(byte: &[u8]) -> Result<Vec<ParseData>> {
     if byte.len() < 2 {
-        Err(E::EmptyFormatControls)
+        Err(E::EmptyFormatControls.into())
     } else {
         // Remove surrounding parenthesies and create ParseDatas
         Ok(from_utf8(&byte[1..byte.len() - 1])?
@@ -272,7 +290,7 @@ fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
             .collect();
         Ok(DDFEntry { fic, name, foc })
     } else {
-        Err(E::InvalidHeader)
+        Err(E::InvalidHeader.into())
     }
 }
 
@@ -313,7 +331,7 @@ fn parse_ddr(ddr_bytes: &[u8]) -> Result<DDR> {
     let leader = parse_leader(&ddr_bytes[..24])?;
     let field_area_idx = match ddr_bytes.iter().position(|&b| b == RECORD_SEPARATOR) {
         Some(index) => index,
-        None => return Err(E::BadDirectoryData()),
+        None => return Err(E::BadDirectoryData.into()),
     };
     let dirs = parse_directory(&ddr_bytes[24..field_area_idx], &leader)?;
     let data_descriptive_fields = parse_ddfs(&ddr_bytes[field_area_idx + 1..], &dirs)?;
