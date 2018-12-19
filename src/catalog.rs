@@ -120,56 +120,29 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum E {
     #[fail(display = "Bad Data Structure Code")]
     BadDataStructureCode,
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "Bad Data Type Code")]
     BadDataTypeCode,
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "Bad Directory Data")]
     BadDirectoryData,
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "Bad Truncated Escape Sequence")]
     BadTruncEscSeq,
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "Empty Format Controls")]
     EmptyFormatControls,
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "Invalid Header")]
     InvalidHeader,
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "IOError : {}", _0)]
     IOError(std::io::Error),
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "ParseError : {}", _0)]
     ParseError(std::string::ParseError),
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "ParseIntError: {}", _0)]
     ParseIntError(std::num::ParseIntError),
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "ParseFloatError: {}", _0)]
     ParseFloatError(std::num::ParseFloatError),
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "UnParsable: {} ", _0)]
     UnParsable(String),
-    #[fail(display = "Bad Data Structure Code")]
+    #[fail(display = "UtfError: {}", _0)]
     UtfError(std::str::Utf8Error),
 }
-
-//
-//impl From<std::io::Error> for E {
-//fn from(e: std::io::Error) -> E {
-//E::IOError(e)
-//}
-//}
-//impl From<std::str::Utf8Error> for E {
-//fn from(e: Utf8Error) -> E {
-//E::UtfError(e)
-//}
-//}
-//impl From<std::string::ParseError> for E {
-//fn from(e: std::string::ParseError) -> E {
-//E::ParseError(e)
-//}
-//}
-//impl From<std::num::ParseIntError> for E {
-//fn from(e: std::num::ParseIntError) -> E {
-//E::ParseIntError(e)
-//}
-//}
-//impl From<std::num::ParseFloatError> for E {
-//fn from(e: std::num::ParseFloatError) -> E {
-//E::ParseFloatError(e)
-//}
-//}
 
 fn parse_leader(byte: &[u8]) -> Result<Leader> {
     let rl = std::str::from_utf8(&byte[..5])?.parse()?;
@@ -239,6 +212,9 @@ fn parse_field_controls(byte: &[u8]) -> Result<FieldControls> {
 
 fn parse_array_descriptors(byte: &[u8]) -> Result<Vec<String>> {
     if byte.is_empty() {
+        // The Record Identifier is an unnamed descriptor and therefore the byte
+        // array is empty. Since this is a key in a HashMap I use the name DRID
+        // (Data Record ID) to identify this field.
         Ok(vec![String::from("DRID")])
     } else {
         Ok(from_utf8(&byte[..])?
