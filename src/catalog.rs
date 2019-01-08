@@ -1,3 +1,8 @@
+//! The catalog.rs provides the functionality to parse a CATALOG.031 file. It tries to use the
+//! nomenclature from the S-57 data specification found in the Annex A section of
+//! [`S-57 Specification`](http://iho.int/iho_pubs/standard/S-57Ed3.1/31Main.pdf). When reading it, remember to also keep
+//! the maintenance document [`S-57 Maintenance`](http://iho.int/iho_pubs/maint/S57md8.pdf) close by since this section
+//! in particular has alot of corrections.
 use crate::data_parser::{Data, ParseData, ParseType};
 use failure::{Error, Fail};
 use std::io::Read;
