@@ -1,4 +1,6 @@
-use crate::catalog::{Result, E, UNIT_SEPARATOR};
+use crate::catalog::{parse_to_u32, Result, UNIT_SEPARATOR};
+use crate::error::ErrorKind;
+use failure::ResultExt;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::io::prelude::*;
@@ -47,7 +49,7 @@ impl ParseData {
                 });
                 Ok((num, pd))
             }
-            None => Err(E::UnParsable(String::from(s)).into()),
+            None => Err(ErrorKind::UnParsable(String::from(s)).into()),
         }
     }
 
@@ -55,20 +57,26 @@ impl ParseData {
         let (d, t) = match &self {
             ParseData::Fixed(t, size) => {
                 let mut data = vec![0; *size];
-                rdr.read_exact(&mut data)?;
+                rdr.read_exact(&mut data)
+                    .with_context(|err| ErrorKind::IOError(err.kind()))?;
                 (data, t)
             }
             ParseData::Variable(t) => {
                 let mut data = Vec::new();
-                rdr.read_until(UNIT_SEPARATOR, &mut data)?;
+                rdr.read_until(UNIT_SEPARATOR, &mut data)
+                    .with_context(|err| ErrorKind::IOError(err.kind()))?;
                 (Vec::from(&data[..data.len() - 1]), t)
             }
         };
-        let d = std::str::from_utf8(&d)?;
+        let d = std::str::from_utf8(&d).with_context(|&err| ErrorKind::UtfError(err))?;
         match t {
-            ParseType::String => Ok(Data::String(d.parse()?)),
-            ParseType::Integer => Ok(Data::Integer(d.parse()?)),
-            ParseType::Float => Ok(Data::Float(d.parse()?)),
+            ParseType::String => Ok(Data::String(d.to_string())),
+            ParseType::Integer => Ok(Data::Integer(d.parse().with_context(
+                |err: &std::num::ParseIntError| ErrorKind::ParseIntError(err.clone()),
+            )?)),
+            ParseType::Float => Ok(Data::Float(d.parse().with_context(
+                |err: &std::num::ParseFloatError| ErrorKind::ParseFloatError(err.clone()),
+            )?)),
         }
     }
 }

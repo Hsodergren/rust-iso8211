@@ -1,19 +1,24 @@
-use failure::Error;
 use rust_s57::catalog::Catalog;
+use std::fs::File;
+
+type Result<T> = std::result::Result<T, failure::Error>;
+
+fn print_error(err: &failure::Error) {
+    for c in err.iter_chain() {
+        println!("{}", c);
+    }
+}
 
 #[test]
-fn test_parse_catalog() -> Result<(), Error> {
-    let cf = std::fs::File::open("tests/CATALOG.031").unwrap();
-    if let Err(e) = Catalog::new(cf) {
-        let mut pretty = e.to_string();
-        let mut prev = e.as_fail();
-        while let Some(next) = prev.cause() {
-            pretty.push_str(": ");
-            pretty.push_str(&next.to_string());
-            prev = next;
-        }
-        println!("{:?}", e.backtrace());
+fn test_parse_catalog() {
+    if let Err(e) = try_main() {
+        println!("{}", e.backtrace());
+        print_error(&e);
         assert!(false)
     }
-    Ok(())
+}
+
+fn try_main() -> Result<Catalog<File>> {
+    let cf = File::open("tests/CATALOG.031").unwrap();
+    Ok(Catalog::new(cf)?)
 }
