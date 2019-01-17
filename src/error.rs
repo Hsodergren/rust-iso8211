@@ -40,16 +40,30 @@ impl From<Context<ErrorKind>> for Error {
 
 #[derive(Fail, Debug)]
 pub enum ErrorKind {
-    #[fail(display = "Bad Data Structure Code")]
-    BadDataStructureCode,
-    #[fail(display = "Bad Data Type Code")]
-    BadDataTypeCode,
+    #[fail(display = "Bad Data Structure Code: {}", _0)]
+    BadDataStructureCode(String),
+    #[fail(display = "Bad Data Type Code: {}", _0)]
+    BadDataTypeCode(String),
     #[fail(display = "Bad Directory Data")]
     BadDirectoryData,
-    #[fail(display = "Bad Truncated Escape Sequence")]
-    BadTruncEscSeq,
+    #[fail(display = "Bad Truncated Escape Sequence: '{}'", _0)]
+    BadTruncEscSeq(String),
+    #[fail(display = "Bad Field Control")]
+    BadFieldControl,
+    #[fail(display = "Could Not Parse The Catalog File")]
+    CouldNotParseCatalog,
+    #[fail(display = "Could Not Parse Name")]
+    CouldNotParseName,
     #[fail(display = "Empty Format Controls")]
     EmptyFormatControls,
+    #[fail(display = "A Data Descriptive Record is not correct.")]
+    InvalidDDR,
+    #[fail(display = "The Leader in the Data Descriptive Record is not correct.")]
+    InvalidDDRLeader,
+    #[fail(display = "Invalid Field with name: '{}'", _0)]
+    InvalidDDF(String),
+    #[fail(display = "A Data Descriptive Field is not correct")]
+    InvalidDDFS,
     #[fail(display = "Invalid Header")]
     InvalidHeader,
     #[fail(display = "IOError")]

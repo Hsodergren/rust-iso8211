@@ -6,6 +6,7 @@
 use crate::data_parser::{Data, ParseData, ParseType};
 use crate::error::{Error, ErrorKind};
 use failure::ResultExt;
+use std::fmt;
 use std::io::Read;
 use std::str::{from_utf8, FromStr};
 
@@ -31,10 +32,16 @@ struct Leader {
 }
 
 #[derive(Debug, PartialEq)]
-struct DirectoryEntry {
+pub(crate) struct DirectoryEntry {
     id: String,    // The Id of the field
     length: usize, // The length of the field in bytes
     offset: usize, // The offset in bytes form the start of the record
+}
+
+impl fmt::Display for DirectoryEntry {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.id, f)
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -51,7 +58,7 @@ impl FromStr for DataStructureCode {
             "0" => Ok(DataStructureCode::SDI),
             "1" => Ok(DataStructureCode::LS),
             "2" => Ok(DataStructureCode::MDS),
-            _ => Err(ErrorKind::BadDataStructureCode.into()),
+            _ => Err(ErrorKind::BadDataStructureCode(value.to_string()).into()),
         }
     }
 }
@@ -73,7 +80,7 @@ impl FromStr for DataTypeCode {
             "2" => Ok(DataTypeCode::EP),
             "5" => Ok(DataTypeCode::BF),
             "6" => Ok(DataTypeCode::MDT),
-            _ => Err(ErrorKind::BadDataTypeCode.into()),
+            _ => Err(ErrorKind::BadDataTypeCode(value.to_string()).into()),
         }
     }
 }
@@ -92,7 +99,7 @@ impl FromStr for TruncEscSeq {
             "   " => Ok(TruncEscSeq::LE0),
             "-A " => Ok(TruncEscSeq::LE1),
             "%/A" => Ok(TruncEscSeq::LE2),
-            _ => Err(ErrorKind::BadTruncEscSeq.into()),
+            _ => Err(ErrorKind::BadTruncEscSeq(value.to_string()).into()),
         }
     }
 }
@@ -188,15 +195,18 @@ fn parse_directory(byte: &[u8], leader: &Leader) -> Result<Vec<DirectoryEntry>> 
 fn parse_field_controls(byte: &[u8]) -> Result<FieldControls> {
     let dsc = from_utf8(&byte[0..1])
         .with_context(|&err| ErrorKind::UtfError(err))?
-        .parse()?;
+        .parse::<DataStructureCode>()
+        .context(ErrorKind::BadFieldControl)?;
     let dtc = from_utf8(&byte[1..2])
         .with_context(|&err| ErrorKind::UtfError(err))?
-        .parse()?;
+        .parse::<DataTypeCode>()
+        .context(ErrorKind::BadFieldControl)?;
     let aux = parse_to_string(&byte[2..4])?;
     let prt = parse_to_string(&byte[4..6])?;
     let tes = from_utf8(&byte[6..])
         .with_context(|&err| ErrorKind::UtfError(err))?
-        .parse()?;
+        .parse::<TruncEscSeq>()
+        .context(ErrorKind::BadFieldControl)?;
 
     Ok(FieldControls {
         dsc,
@@ -244,7 +254,7 @@ fn parse_ddfs(byte: &[u8], dirs: &[DirectoryEntry]) -> Result<Vec<DDFEntry>> {
             let s = dir.offset;
             //  take -1 to remove the record separator from the slice
             let e = dir.offset + dir.length - 1;
-            parse_ddf(&byte[s..e])
+            Ok(parse_ddf(&byte[s..e]).context(ErrorKind::InvalidDDFS)?)
         })
         .collect()
 }
@@ -252,8 +262,8 @@ fn parse_ddfs(byte: &[u8], dirs: &[DirectoryEntry]) -> Result<Vec<DDFEntry>> {
 fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
     let parts = byte.split(|&b| b == UNIT_SEPARATOR).collect::<Vec<&[u8]>>();
     let (fic_bytes, name_bytes) = parts.get(0).ok_or(ErrorKind::InvalidHeader)?.split_at(9);
-    let fic = parse_field_controls(fic_bytes)?;
-    let name = parse_to_string(name_bytes)?;
+    let name = parse_to_string(name_bytes).context(ErrorKind::CouldNotParseName)?;
+    let fic = parse_field_controls(fic_bytes).context(ErrorKind::InvalidDDF(name.clone()))?;
     let array_desc = parse_array_descriptors(parts.get(1).ok_or(ErrorKind::InvalidHeader)?)?;
     let data_parser = parse_format_controls(parts.get(2).ok_or(ErrorKind::InvalidHeader)?)?;
     if array_desc.len() == data_parser.len() {
@@ -297,19 +307,21 @@ impl<R: Read> Catalog<R> {
         //Concatenate to make complete ddr data
         let mut ddr_bytes = ddr_bytes.to_vec();
         ddr_bytes.append(&mut ddr_data);
-        let ddr = parse_ddr(&ddr_bytes)?;
+        let ddr = parse_ddr(&ddr_bytes).context(ErrorKind::CouldNotParseCatalog)?;
         Ok(Catalog { ddr, rdr })
     }
 }
 
 fn parse_ddr(ddr_bytes: &[u8]) -> Result<DDR> {
-    let leader = parse_leader(&ddr_bytes[..24])?;
+    let leader = parse_leader(&ddr_bytes[..24]).context(ErrorKind::InvalidDDRLeader)?;
     let field_area_idx = match ddr_bytes.iter().position(|&b| b == RECORD_SEPARATOR) {
         Some(index) => index,
         None => return Err(ErrorKind::BadDirectoryData.into()),
     };
-    let dirs = parse_directory(&ddr_bytes[24..field_area_idx], &leader)?;
-    let data_descriptive_fields = parse_ddfs(&ddr_bytes[field_area_idx + 1..], &dirs)?;
+    let dirs = parse_directory(&ddr_bytes[24..field_area_idx], &leader)
+        .context(ErrorKind::InvalidHeader)?;
+    let data_descriptive_fields =
+        parse_ddfs(&ddr_bytes[field_area_idx + 1..], &dirs).context(ErrorKind::InvalidDDR)?;
 
     Ok(DDR {
         leader,
