@@ -129,7 +129,7 @@ struct DDFEntry {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub(crate) fn parse_to_u32(bytes: &[u8]) -> Result<u32> {
+pub(crate) fn parse_to_usize(bytes: &[u8]) -> Result<usize> {
     Ok(from_utf8(bytes)
         .with_context(|&err| ErrorKind::UtfError(err))?
         .parse()
@@ -143,19 +143,19 @@ pub(crate) fn parse_to_string(bytes: &[u8]) -> Result<String> {
 }
 
 fn parse_leader(byte: &[u8]) -> Result<Leader> {
-    let rl = parse_to_u32(&byte[..5])?;
+    let rl = parse_to_usize(&byte[..5])? as u32;
     let il = byte[5] as char;
     let li = byte[6] as char;
     let cei = byte[7] as char;
     let vn = byte[8] as char;
     let ai = byte[9] as char;
     let fcl = [byte[10] as char, byte[11] as char];
-    let ba = parse_to_u32(&byte[12..17])?;
+    let ba = parse_to_usize(&byte[12..17])? as u32;
     let csi = [byte[17] as char, byte[18] as char, byte[19] as char];
-    let flf = parse_to_u32(&byte[20..21])? as usize;
-    let fpf = parse_to_u32(&byte[21..22])? as usize;
+    let flf = parse_to_usize(&byte[20..21])?;
+    let fpf = parse_to_usize(&byte[21..22])?;
     let rsv = byte[22] as char;
-    let ftf = parse_to_u32(&byte[23..24])? as usize;
+    let ftf = parse_to_usize(&byte[23..24])?;
     Ok(Leader {
         rl,
         il,
@@ -175,7 +175,7 @@ fn parse_leader(byte: &[u8]) -> Result<Leader> {
 
 // TODO: Change this function to use exact_chunk when it is stable
 fn parse_directory(byte: &[u8], leader: &Leader) -> Result<Vec<DirectoryEntry>> {
-    let chunksize = (leader.ftf + leader.flf + leader.fpf) as usize;
+    let chunksize = (leader.ftf + leader.flf + leader.fpf);
     let dir_iter = byte.chunks(chunksize);
     let mut directories: Vec<DirectoryEntry> = Vec::new();
     for d in dir_iter {
@@ -183,8 +183,8 @@ fn parse_directory(byte: &[u8], leader: &Leader) -> Result<Vec<DirectoryEntry>> 
             return Err(ErrorKind::BadDirectoryData.into());
         }
         let id = parse_to_string(&d[..leader.ftf])?;
-        let length = parse_to_u32(&d[leader.ftf..leader.ftf + leader.flf])? as usize;
-        let offset = parse_to_u32(&d[leader.ftf + leader.flf..])? as usize;
+        let length = parse_to_usize(&d[leader.ftf..leader.ftf + leader.flf])?;
+        let offset = parse_to_usize(&d[leader.ftf + leader.flf..])?;
 
         directories.push(DirectoryEntry { id, length, offset });
     }
@@ -299,7 +299,7 @@ impl<R: Read> Catalog<R> {
             .with_context(|err| ErrorKind::IOError(err.kind()))?;
 
         // Read the rest of the DDR
-        let ddr_length = parse_to_u32(&ddr_bytes)? as usize;
+        let ddr_length = parse_to_usize(&ddr_bytes)?;
         let mut ddr_data = vec![0; ddr_length - 5];
         rdr.read_exact(&mut ddr_data)
             .with_context(|err| ErrorKind::IOError(err.kind()))?;

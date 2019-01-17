@@ -1,4 +1,4 @@
-use crate::catalog::{parse_to_u32, Result, UNIT_SEPARATOR};
+use crate::catalog::{parse_to_usize, Result, UNIT_SEPARATOR};
 use crate::error::ErrorKind;
 use failure::ResultExt;
 use lazy_static::lazy_static;
