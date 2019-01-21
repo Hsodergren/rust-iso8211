@@ -15,7 +15,7 @@ pub(crate) const UNIT_SEPARATOR: u8 = 0x1f;
 
 #[derive(Debug, PartialEq)]
 struct Leader {
-    rl: usize,      // Record Lenght
+    rl: usize,      // Record Length
     il: char,       // Interchange Level
     li: char,       // Leader Identifier
     cei: char,      // In Line Code Extension Indicator
@@ -143,7 +143,7 @@ pub(crate) fn parse_to_string(bytes: &[u8]) -> Result<String> {
 }
 
 fn parse_leader(byte: &[u8], len: usize) -> Result<Leader> {
-    let rl = len; //parse_to_usize(&byte[..5]).context(ErrorKind::InvalidLeader)? as u32;
+    let rl = len;
     let il = byte[0] as char;
     let li = byte[1] as char;
     let cei = byte[2] as char;
@@ -175,7 +175,7 @@ fn parse_leader(byte: &[u8], len: usize) -> Result<Leader> {
 
 // TODO: Change this function to use exact_chunk when it is stable
 fn parse_directory(byte: &[u8], leader: &Leader) -> Result<Vec<DirectoryEntry>> {
-    let chunksize = (leader.ftf + leader.flf + leader.fpf);
+    let chunksize = leader.ftf + leader.flf + leader.fpf;
     let dir_iter = byte.chunks(chunksize);
     let mut directories: Vec<DirectoryEntry> = Vec::new();
     for d in dir_iter {
@@ -238,7 +238,7 @@ fn parse_format_controls(byte: &[u8]) -> Result<Vec<ParseData>> {
         // Remove surrounding parenthesies and create ParseDatas
         Ok(parse_to_string(&byte[1..byte.len() - 1])?
             .split(',')
-            .map(|fc| ParseData::new(fc))
+            .map(|fc| ParseData::from_str(fc))
             .collect::<Result<Vec<(usize, ParseData)>>>()?
             .into_iter()
             .flat_map(|pd| std::iter::repeat(pd.1).take(pd.0))
@@ -264,8 +264,12 @@ fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
     let (fic_bytes, name_bytes) = parts.get(0).ok_or(ErrorKind::InvalidHeader)?.split_at(9);
     let name = parse_to_string(name_bytes).context(ErrorKind::CouldNotParseName)?;
     let fic = parse_field_controls(fic_bytes).context(ErrorKind::InvalidDDF(name.clone()))?;
-    let array_desc = parse_array_descriptors(parts.get(1).ok_or(ErrorKind::InvalidHeader)?)?;
-    let data_parser = parse_format_controls(parts.get(2).ok_or(ErrorKind::InvalidHeader)?)?;
+    let array_desc =
+        parse_array_descriptors(parts.get(1).ok_or(ErrorKind::InvalidDDF(name.clone()))?)
+            .context(ErrorKind::InvalidDDF(name.clone()))?;
+    let data_parser =
+        parse_format_controls(parts.get(2).ok_or(ErrorKind::InvalidDDF(name.clone()))?)
+            .context(ErrorKind::InvalidDDF(name.clone()))?;
     if array_desc.len() == data_parser.len() {
         let foc = array_desc
             .into_iter()
@@ -273,7 +277,7 @@ fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
             .collect();
         Ok(DDFEntry { fic, name, foc })
     } else {
-        Err(ErrorKind::InvalidHeader.into())
+        Err(ErrorKind::InvalidDDF(name.clone()).into())
     }
 }
 

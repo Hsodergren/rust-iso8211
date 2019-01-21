@@ -56,7 +56,7 @@ pub enum ErrorKind {
     CouldNotParseName,
     #[fail(display = "Empty Format Controls")]
     EmptyFormatControls,
-    #[fail(display = "A Data Descriptive Record is not correct.")]
+    #[fail(display = "The Data Descriptive Record is not correct.")]
     InvalidDDR,
     #[fail(display = "The Leader is not correct.")]
     InvalidLeader,
@@ -72,8 +72,8 @@ pub enum ErrorKind {
     ParseIntError(#[cause] std::num::ParseIntError),
     #[fail(display = "ParseFloatError")]
     ParseFloatError(#[cause] std::num::ParseFloatError),
-    #[fail(display = "UnParsable: {}", _0)]
-    UnParsable(String),
+    #[fail(display = "Can not parse Format Control '{}'", _0)]
+    UnParsableFormatControl(String),
     #[fail(display = "UtfError")]
     UtfError(#[cause] std::str::Utf8Error),
     #[doc(hidden)]

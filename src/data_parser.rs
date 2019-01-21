@@ -1,4 +1,4 @@
-use crate::catalog::{parse_to_usize, Result, UNIT_SEPARATOR};
+use crate::catalog::{Result, UNIT_SEPARATOR};
 use crate::error::ErrorKind;
 use failure::ResultExt;
 use lazy_static::lazy_static;
@@ -33,7 +33,7 @@ pub enum Data {
 }
 
 impl ParseData {
-    pub(crate) fn new(s: &str) -> Result<(usize, ParseData)> {
+    pub(crate) fn from_str(s: &str) -> Result<(usize, ParseData)> {
         match FIELD_REGEX.captures(s) {
             Some(cap) => {
                 let num = cap.get(1).map_or(1, |c| c.as_str().parse().unwrap());
@@ -49,7 +49,7 @@ impl ParseData {
                 });
                 Ok((num, pd))
             }
-            None => Err(ErrorKind::UnParsable(String::from(s)).into()),
+            None => Err(ErrorKind::UnParsableFormatControl(String::from(s)).into()),
         }
     }
 
@@ -88,39 +88,39 @@ mod tests {
     #[test]
     fn parsedata() {
         assert_eq!(
-            ParseData::new("A(3)").unwrap(),
+            ParseData::from_str("A(3)").unwrap(),
             (1, ParseData::Fixed(ParseType::String, 3))
         );
         assert_eq!(
-            ParseData::new("I(10)").unwrap(),
+            ParseData::from_str("I(10)").unwrap(),
             (1, ParseData::Fixed(ParseType::Integer, 10))
         );
         assert_eq!(
-            ParseData::new("R(5)").unwrap(),
+            ParseData::from_str("R(5)").unwrap(),
             (1, ParseData::Fixed(ParseType::Float, 5))
         );
         assert_eq!(
-            ParseData::new("5R").unwrap(),
+            ParseData::from_str("5R").unwrap(),
             (5, ParseData::Variable(ParseType::Float))
         );
         assert_eq!(
-            ParseData::new("10I").unwrap(),
+            ParseData::from_str("10I").unwrap(),
             (10, ParseData::Variable(ParseType::Integer))
         );
         assert_eq!(
-            ParseData::new("1A").unwrap(),
+            ParseData::from_str("1A").unwrap(),
             (1, ParseData::Variable(ParseType::String))
         );
         assert_eq!(
-            ParseData::new("2A(3)").unwrap(),
+            ParseData::from_str("2A(3)").unwrap(),
             (2, ParseData::Fixed(ParseType::String, 3))
         );
         assert_eq!(
-            ParseData::new("10I(10)").unwrap(),
+            ParseData::from_str("10I(10)").unwrap(),
             (10, ParseData::Fixed(ParseType::Integer, 10))
         );
         assert_eq!(
-            ParseData::new("1R(5)").unwrap(),
+            ParseData::from_str("1R(5)").unwrap(),
             (1, ParseData::Fixed(ParseType::Float, 5))
         );
     }
