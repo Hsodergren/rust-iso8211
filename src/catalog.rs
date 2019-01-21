@@ -15,7 +15,7 @@ pub(crate) const UNIT_SEPARATOR: u8 = 0x1f;
 
 #[derive(Debug, PartialEq)]
 struct Leader {
-    rl: u32,        // Record Lenght
+    rl: usize,      // Record Lenght
     il: char,       // Interchange Level
     li: char,       // Leader Identifier
     cei: char,      // In Line Code Extension Indicator
@@ -142,20 +142,20 @@ pub(crate) fn parse_to_string(bytes: &[u8]) -> Result<String> {
         .to_string())
 }
 
-fn parse_leader(byte: &[u8]) -> Result<Leader> {
-    let rl = parse_to_usize(&byte[..5])? as u32;
-    let il = byte[5] as char;
-    let li = byte[6] as char;
-    let cei = byte[7] as char;
-    let vn = byte[8] as char;
-    let ai = byte[9] as char;
-    let fcl = [byte[10] as char, byte[11] as char];
-    let ba = parse_to_usize(&byte[12..17])? as u32;
-    let csi = [byte[17] as char, byte[18] as char, byte[19] as char];
-    let flf = parse_to_usize(&byte[20..21])?;
-    let fpf = parse_to_usize(&byte[21..22])?;
-    let rsv = byte[22] as char;
-    let ftf = parse_to_usize(&byte[23..24])?;
+fn parse_leader(byte: &[u8], len: usize) -> Result<Leader> {
+    let rl = len; //parse_to_usize(&byte[..5]).context(ErrorKind::InvalidLeader)? as u32;
+    let il = byte[0] as char;
+    let li = byte[1] as char;
+    let cei = byte[2] as char;
+    let vn = byte[3] as char;
+    let ai = byte[4] as char;
+    let fcl = [byte[5] as char, byte[6] as char];
+    let ba = parse_to_usize(&byte[7..12]).context(ErrorKind::InvalidLeader)? as u32;
+    let csi = [byte[12] as char, byte[13] as char, byte[14] as char];
+    let flf = parse_to_usize(&byte[15..16]).context(ErrorKind::InvalidLeader)?;
+    let fpf = parse_to_usize(&byte[16..17]).context(ErrorKind::InvalidLeader)?;
+    let rsv = byte[17] as char;
+    let ftf = parse_to_usize(&byte[18..19]).context(ErrorKind::InvalidLeader)?;
     Ok(Leader {
         rl,
         il,
@@ -304,22 +304,19 @@ impl<R: Read> Catalog<R> {
         rdr.read_exact(&mut ddr_data)
             .with_context(|err| ErrorKind::IOError(err.kind()))?;
 
-        //Concatenate to make complete ddr data
-        let mut ddr_bytes = ddr_bytes.to_vec();
-        ddr_bytes.append(&mut ddr_data);
-        let ddr = parse_ddr(&ddr_bytes).context(ErrorKind::CouldNotParseCatalog)?;
+        let ddr = parse_ddr(&ddr_data, ddr_length).context(ErrorKind::CouldNotParseCatalog)?;
         Ok(Catalog { ddr, rdr })
     }
 }
 
-fn parse_ddr(ddr_bytes: &[u8]) -> Result<DDR> {
-    let leader = parse_leader(&ddr_bytes[..24]).context(ErrorKind::InvalidDDRLeader)?;
+fn parse_ddr(ddr_bytes: &[u8], len: usize) -> Result<DDR> {
+    let leader = parse_leader(&ddr_bytes[..19], len).context(ErrorKind::InvalidDDR)?;
     let field_area_idx = match ddr_bytes.iter().position(|&b| b == RECORD_SEPARATOR) {
         Some(index) => index,
         None => return Err(ErrorKind::BadDirectoryData.into()),
     };
-    let dirs = parse_directory(&ddr_bytes[24..field_area_idx], &leader)
-        .context(ErrorKind::InvalidHeader)?;
+    let dirs =
+        parse_directory(&ddr_bytes[19..field_area_idx], &leader).context(ErrorKind::InvalidDDR)?;
     let data_descriptive_fields =
         parse_ddfs(&ddr_bytes[field_area_idx + 1..], &dirs).context(ErrorKind::InvalidDDR)?;
 
@@ -394,9 +391,10 @@ mod test {
 
     #[test]
     fn test_parse_leader() {
-        let leader = "002413LE1 0900058 ! 3404".as_bytes();
+        let length = 241;
+        let leader = "3LE1 0900058 ! 3404".as_bytes();
         let expected = get_test_leader();
-        let actual = parse_leader(leader).unwrap();
+        let actual = parse_leader(leader, length).unwrap();
         assert_eq!(actual, expected);
     }
 

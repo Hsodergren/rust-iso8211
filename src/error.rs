@@ -58,8 +58,8 @@ pub enum ErrorKind {
     EmptyFormatControls,
     #[fail(display = "A Data Descriptive Record is not correct.")]
     InvalidDDR,
-    #[fail(display = "The Leader in the Data Descriptive Record is not correct.")]
-    InvalidDDRLeader,
+    #[fail(display = "The Leader is not correct.")]
+    InvalidLeader,
     #[fail(display = "Invalid Field with name: '{}'", _0)]
     InvalidDDF(String),
     #[fail(display = "A Data Descriptive Field is not correct")]
