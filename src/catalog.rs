@@ -6,8 +6,9 @@
 use crate::data_parser::{Data, ParseData, ParseType};
 use crate::error::{Error, ErrorKind};
 use failure::ResultExt;
+use std::collections::HashMap;
 use std::fmt;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::str::{from_utf8, FromStr};
 
 pub(crate) const RECORD_SEPARATOR: u8 = 0x1e;
@@ -130,10 +131,10 @@ struct DDFEntry {
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub(crate) fn parse_to_usize(bytes: &[u8]) -> Result<usize> {
-    Ok(from_utf8(bytes)
-        .with_context(|&err| ErrorKind::UtfError(err))?
-        .parse()
-        .with_context(|err: &std::num::ParseIntError| ErrorKind::ParseIntError(err.clone()))?)
+    let s = from_utf8(bytes).with_context(|&err| ErrorKind::UtfError(err))?;
+    Ok(s.parse().with_context(|err: &std::num::ParseIntError| {
+        ErrorKind::ParseIntError(err.clone(), s.to_string())
+    })?)
 }
 
 pub(crate) fn parse_to_string(bytes: &[u8]) -> Result<String> {
@@ -246,7 +247,7 @@ fn parse_format_controls(byte: &[u8]) -> Result<Vec<ParseData>> {
     }
 }
 
-fn parse_ddfs(byte: &[u8], dirs: &[DirectoryEntry]) -> Result<Vec<DDFEntry>> {
+fn parse_ddfs(byte: &[u8], dirs: &[DirectoryEntry]) -> Result<HashMap<String, DDFEntry>> {
     // We should absolutely handle the file control field... later... but for now we skip it.
     dirs.iter()
         .skip(1)
@@ -254,7 +255,8 @@ fn parse_ddfs(byte: &[u8], dirs: &[DirectoryEntry]) -> Result<Vec<DDFEntry>> {
             let s = dir.offset;
             //  take -1 to remove the record separator from the slice
             let e = dir.offset + dir.length - 1;
-            Ok(parse_ddf(&byte[s..e]).context(ErrorKind::InvalidDDFS)?)
+            let ddf_entry = parse_ddf(&byte[s..e]).context(ErrorKind::InvalidDDFS)?;
+            Ok((dir.id.clone(), ddf_entry))
         })
         .collect()
 }
@@ -286,7 +288,7 @@ struct DDR {
     leader: Leader,
     dirs: Vec<DirectoryEntry>,
     // file_control_field,
-    data_descriptive_fields: Vec<DDFEntry>,
+    data_descriptive_fields: HashMap<String, DDFEntry>,
 }
 
 #[derive(Debug)]
@@ -295,34 +297,86 @@ pub struct Catalog<R: Read> {
     rdr: R,   // reader to ask for Data Records
 }
 
+#[derive(Debug)]
+pub struct Record {
+    data: HashMap<String, HashMap<String, Data>>,
+}
+
 impl<R: Read> Catalog<R> {
     pub fn new(mut rdr: R) -> Result<Catalog<R>> {
-        // Read the length of the DDR, stored in the first 5 bytes
-        let mut ddr_bytes = [0; 5];
-        rdr.read_exact(&mut ddr_bytes)
-            .with_context(|err| ErrorKind::IOError(err.kind()))?;
-
-        // Read the rest of the DDR
-        let ddr_length = parse_to_usize(&ddr_bytes)?;
-        let mut ddr_data = vec![0; ddr_length - 5];
-        rdr.read_exact(&mut ddr_data)
-            .with_context(|err| ErrorKind::IOError(err.kind()))?;
-
-        let ddr = parse_ddr(&ddr_data, ddr_length).context(ErrorKind::CouldNotParseCatalog)?;
+        let ddr = parse_ddr(&mut rdr).context(ErrorKind::CouldNotParseCatalog)?;
         Ok(Catalog { ddr, rdr })
+    }
+
+    fn parse_dr(&mut self) -> Result<Option<Record>> {
+        let (leader, dirs, field_data) = match parse_leader_and_dir(&mut self.rdr) {
+            Ok(ok) => ok,
+            Err(err) => match err.kind() {
+                ErrorKind::EOF => return Ok(None),
+                _ => return Err(err),
+            },
+        };
+        let mut cur = std::io::Cursor::new(field_data);
+        let mut record = Record {
+            data: HashMap::new(),
+        };
+        for dir_entry in dirs.iter() {
+            let ddf_entry = self
+                .ddr
+                .data_descriptive_fields
+                .get(&dir_entry.id)
+                .ok_or(ErrorKind::InvalidDR)?;
+            let field_area_row = ddf_entry
+                .foc
+                .iter()
+                .map(|(name, parser)| Ok((name.clone(), parser.parse(&mut cur)?)))
+                .collect::<Result<HashMap<String, Data>>>()?;
+            cur.seek(SeekFrom::Current(1));
+            record.data.insert(dir_entry.id.clone(), field_area_row);
+        }
+        Ok(Some(record))
     }
 }
 
-fn parse_ddr(ddr_bytes: &[u8], len: usize) -> Result<DDR> {
-    let leader = parse_leader(&ddr_bytes[..19], len).context(ErrorKind::InvalidDDR)?;
-    let field_area_idx = match ddr_bytes.iter().position(|&b| b == RECORD_SEPARATOR) {
+impl<R: Read> Iterator for Catalog<R> {
+    type Item = Result<Record>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.parse_dr() {
+            Ok(Some(dr)) => Some(Ok(dr)),
+            Ok(None) => None,
+            Err(err) => Some(Err(err)),
+        }
+    }
+}
+fn parse_leader_and_dir<R: Read>(rdr: &mut R) -> Result<(Leader, Vec<DirectoryEntry>, Vec<u8>)> {
+    // Read the length of the DDR, stored in the first 5 bytes
+    let mut len_bytes = [0; 5];
+    let nr_of_bytes = rdr
+        .read(&mut len_bytes)
+        .with_context(|err| ErrorKind::IOError(err.kind()))?;
+    match nr_of_bytes {
+        0 => return Err(ErrorKind::EOF.into()),
+        5 => (),
+        _ => return Err(ErrorKind::IOError(std::io::ErrorKind::UnexpectedEof).into()),
+    }
+
+    // Read the rest of the DDR
+    let length = parse_to_usize(&len_bytes)?;
+    let mut data = vec![0; length - 5];
+    rdr.read_exact(&mut data)
+        .with_context(|err| ErrorKind::IOError(err.kind()))?;
+    let leader = parse_leader(&data[..19], length)?;
+    let field_area_idx = match data.iter().position(|&b| b == RECORD_SEPARATOR) {
         Some(index) => index,
         None => return Err(ErrorKind::BadDirectoryData.into()),
     };
-    let dirs =
-        parse_directory(&ddr_bytes[19..field_area_idx], &leader).context(ErrorKind::InvalidDDR)?;
-    let data_descriptive_fields =
-        parse_ddfs(&ddr_bytes[field_area_idx + 1..], &dirs).context(ErrorKind::InvalidDDR)?;
+    let dirs = parse_directory(&data[19..field_area_idx], &leader)?;
+    Ok((leader, dirs, data[field_area_idx + 1..].to_vec()))
+}
+
+fn parse_ddr<R: Read>(rdr: &mut R) -> Result<DDR> {
+    let (leader, dirs, field_area) = parse_leader_and_dir(rdr)?;
+    let data_descriptive_fields = parse_ddfs(&field_area, &dirs).context(ErrorKind::InvalidDDR)?;
 
     Ok(DDR {
         leader,

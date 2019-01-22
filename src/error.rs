@@ -8,6 +8,12 @@ pub struct Error {
     inner: Context<ErrorKind>,
 }
 
+impl Error {
+    pub fn kind(&self) -> &ErrorKind {
+        self.inner.get_context()
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.inner, f)
@@ -58,6 +64,8 @@ pub enum ErrorKind {
     EmptyFormatControls,
     #[fail(display = "The Data Descriptive Record is not correct.")]
     InvalidDDR,
+    #[fail(display = "A Data Record is not correct.")]
+    InvalidDR,
     #[fail(display = "The Leader is not correct.")]
     InvalidLeader,
     #[fail(display = "Invalid Field with name: '{}'", _0)]
@@ -66,12 +74,14 @@ pub enum ErrorKind {
     InvalidDDFS,
     #[fail(display = "Invalid Header")]
     InvalidHeader,
-    #[fail(display = "IOError")]
+    #[fail(display = "EOF")]
+    EOF,
+    #[fail(display = "IOError: {:?}", _0)]
     IOError(IoError),
-    #[fail(display = "ParseIntError")]
-    ParseIntError(#[cause] std::num::ParseIntError),
-    #[fail(display = "ParseFloatError")]
-    ParseFloatError(#[cause] std::num::ParseFloatError),
+    #[fail(display = "Could not parse '{}' as integer.", _1)]
+    ParseIntError(#[cause] std::num::ParseIntError, String),
+    #[fail(display = "Could not parse '{}' as float.", _1)]
+    ParseFloatError(#[cause] std::num::ParseFloatError, String),
     #[fail(display = "Can not parse Format Control '{}'", _0)]
     UnParsableFormatControl(String),
     #[fail(display = "UtfError")]

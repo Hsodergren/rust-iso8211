@@ -27,9 +27,9 @@ pub(crate) enum ParseType {
 
 #[derive(Debug, PartialEq)]
 pub enum Data {
-    Integer(i64),
+    Integer(Option<i64>),
     String(String),
-    Float(f64),
+    Float(Option<f64>),
 }
 
 impl ParseData {
@@ -71,12 +71,28 @@ impl ParseData {
         let d = std::str::from_utf8(&d).with_context(|&err| ErrorKind::UtfError(err))?;
         match t {
             ParseType::String => Ok(Data::String(d.to_string())),
-            ParseType::Integer => Ok(Data::Integer(d.parse().with_context(
-                |err: &std::num::ParseIntError| ErrorKind::ParseIntError(err.clone()),
-            )?)),
-            ParseType::Float => Ok(Data::Float(d.parse().with_context(
-                |err: &std::num::ParseFloatError| ErrorKind::ParseFloatError(err.clone()),
-            )?)),
+            ParseType::Integer => {
+                if d.is_empty() {
+                    Ok(Data::Integer(None))
+                } else {
+                    Ok(Data::Integer(Some(d.parse().with_context(
+                        |err: &std::num::ParseIntError| {
+                            ErrorKind::ParseIntError(err.clone(), d.to_string())
+                        },
+                    )?)))
+                }
+            }
+            ParseType::Float => {
+                if d.is_empty() {
+                    Ok(Data::Float(None))
+                } else {
+                    Ok(Data::Float(Some(d.parse().with_context(
+                        |err: &std::num::ParseFloatError| {
+                            ErrorKind::ParseFloatError(err.clone(), d.to_string())
+                        },
+                    )?)))
+                }
+            }
         }
     }
 }
@@ -131,7 +147,7 @@ mod tests {
             ParseData::Fixed(ParseType::Integer, 5)
                 .parse(Cursor::new("00001".as_bytes()))
                 .unwrap(),
-            Data::Integer(1)
+            Data::Integer(Some(1))
         );
         assert_eq!(
             ParseData::Fixed(ParseType::String, 5)
@@ -143,7 +159,7 @@ mod tests {
             ParseData::Fixed(ParseType::Float, 5)
                 .parse(Cursor::new("0.005".as_bytes()))
                 .unwrap(),
-            Data::Float(0.005)
+            Data::Float(Some(0.005))
         );
         assert_eq!(
             ParseData::Variable(ParseType::Integer)
@@ -156,7 +172,7 @@ mod tests {
                     UNIT_SEPARATOR,
                 ]))
                 .unwrap(),
-            Data::Integer(1)
+            Data::Integer(Some(1))
         );
         assert_eq!(
             ParseData::Variable(ParseType::String)
@@ -182,7 +198,7 @@ mod tests {
                     UNIT_SEPARATOR,
                 ]))
                 .unwrap(),
-            Data::Float(0.005)
+            Data::Float(Some(0.005))
         );
     }
 }

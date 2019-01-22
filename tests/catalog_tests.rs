@@ -18,7 +18,11 @@ fn test_parse_catalog() {
     }
 }
 
-fn try_main() -> Result<Catalog<File>> {
+fn try_main() -> Result<()> {
     let cf = File::open("tests/CATALOG.031").unwrap();
-    Ok(Catalog::new(cf)?)
+    let catalog = Catalog::new(cf)?;
+    for record in catalog {
+        println!("{:?}", record?);
+    }
+    Ok(())
 }
