@@ -3,7 +3,7 @@
 //! [`S-57 Specification`](http://iho.int/iho_pubs/standard/S-57Ed3.1/31Main.pdf). When reading it, remember to also keep
 //! the maintenance document [`S-57 Maintenance`](http://iho.int/iho_pubs/maint/S57md8.pdf) close by since this section
 //! in particular has alot of corrections.
-use crate::data_parser::{Data, ParseData, ParseType};
+use crate::data_parser::{Data, ParseData};
 use crate::error::{Error, ErrorKind};
 use failure::ResultExt;
 use std::collections::HashMap;
@@ -309,7 +309,7 @@ impl<R: Read> Catalog<R> {
     }
 
     fn parse_dr(&mut self) -> Result<Option<Record>> {
-        let (leader, dirs, field_data) = match parse_leader_and_dir(&mut self.rdr) {
+        let (_, dirs, field_data) = match parse_leader_and_dir(&mut self.rdr) {
             Ok(ok) => ok,
             Err(err) => match err.kind() {
                 ErrorKind::EOF => return Ok(None),
@@ -331,7 +331,8 @@ impl<R: Read> Catalog<R> {
                 .iter()
                 .map(|(name, parser)| Ok((name.clone(), parser.parse(&mut cur)?)))
                 .collect::<Result<HashMap<String, Data>>>()?;
-            cur.seek(SeekFrom::Current(1));
+            cur.seek(SeekFrom::Current(1))
+                .with_context(|err| ErrorKind::IOError(err.kind()))?;
             record.data.insert(dir_entry.id.clone(), field_area_row);
         }
         Ok(Some(record))
@@ -388,6 +389,7 @@ fn parse_ddr<R: Read>(rdr: &mut R) -> Result<DDR> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::data_parser::ParseType;
 
     fn get_test_leader() -> Leader {
         Leader {

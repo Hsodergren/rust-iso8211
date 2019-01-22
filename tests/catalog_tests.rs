@@ -19,9 +19,9 @@ fn test_parse_catalog() {
 }
 
 fn try_main() -> Result<()> {
-    let cf = File::open("tests/CATALOG.031").unwrap();
+    let cf = File::open("tests/CATALOG.031.htm").unwrap();
     let catalog = Catalog::new(cf)?;
-    for record in catalog {
+    for record in catalog.take(500) {
         println!("{:?}", record?);
     }
     Ok(())

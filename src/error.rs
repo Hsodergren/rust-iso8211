@@ -1,7 +1,6 @@
-use failure::{Backtrace, Context, Fail, ResultExt};
+use failure::{Backtrace, Context, Fail};
 use std::fmt;
 use std::io::ErrorKind as IoError;
-use std::result;
 
 #[derive(Debug)]
 pub struct Error {

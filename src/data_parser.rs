@@ -4,7 +4,6 @@ use failure::ResultExt;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::io::prelude::*;
-use std::io::Cursor;
 
 lazy_static! {
     // Maybe a number folowed by A,I,R followed by maybe a parenthesied number
@@ -25,6 +24,7 @@ pub(crate) enum ParseType {
     Float,
 }
 
+// Variable length fields are optional (can be empty), therefore Options
 #[derive(Debug, PartialEq)]
 pub enum Data {
     Integer(Option<i64>),
@@ -100,6 +100,7 @@ impl ParseData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn parsedata() {
