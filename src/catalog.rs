@@ -285,7 +285,6 @@ fn parse_ddf(byte: &[u8]) -> Result<DDFEntry> {
 
 #[derive(Debug)]
 struct DDR {
-    leader: Leader,
     dirs: Vec<DirectoryEntry>,
     // file_control_field,
     data_descriptive_fields: HashMap<String, DDFEntry>,
@@ -309,7 +308,7 @@ impl<R: Read> Catalog<R> {
     }
 
     fn parse_dr(&mut self) -> Result<Option<Record>> {
-        let (_, dirs, field_data) = match parse_leader_and_dir(&mut self.rdr) {
+        let (dirs, field_data) = match parse_dir_and_field_area(&mut self.rdr) {
             Ok(ok) => ok,
             Err(err) => match err.kind() {
                 ErrorKind::EOF => return Ok(None),
@@ -349,7 +348,7 @@ impl<R: Read> Iterator for Catalog<R> {
         }
     }
 }
-fn parse_leader_and_dir<R: Read>(rdr: &mut R) -> Result<(Leader, Vec<DirectoryEntry>, Vec<u8>)> {
+fn parse_dir_and_field_area<R: Read>(rdr: &mut R) -> Result<(Vec<DirectoryEntry>, Vec<u8>)> {
     // Read the length of the DDR, stored in the first 5 bytes
     let mut len_bytes = [0; 5];
     let nr_of_bytes = rdr
@@ -372,15 +371,14 @@ fn parse_leader_and_dir<R: Read>(rdr: &mut R) -> Result<(Leader, Vec<DirectoryEn
         None => return Err(ErrorKind::BadDirectoryData.into()),
     };
     let dirs = parse_directory(&data[19..field_area_idx], &leader)?;
-    Ok((leader, dirs, data[field_area_idx + 1..].to_vec()))
+    Ok((dirs, data[field_area_idx + 1..].to_vec()))
 }
 
 fn parse_ddr<R: Read>(rdr: &mut R) -> Result<DDR> {
-    let (leader, dirs, field_area) = parse_leader_and_dir(rdr)?;
+    let (dirs, field_area) = parse_dir_and_field_area(rdr)?;
     let data_descriptive_fields = parse_ddfs(&field_area, &dirs).context(ErrorKind::InvalidDDR)?;
 
     Ok(DDR {
-        leader,
         dirs,
         data_descriptive_fields,
     })
