@@ -7,9 +7,12 @@ use crate::data_parser::{Data, ParseData};
 use crate::error::{Error, ErrorKind};
 use failure::ResultExt;
 use std::collections::HashMap;
-use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom};
 use std::str::{from_utf8, FromStr};
+
+const DRID: &'static str = "DRID";
+const TOPLVL: &'static str = "0001";
 
 pub(crate) const RECORD_SEPARATOR: u8 = 0x1e;
 pub(crate) const UNIT_SEPARATOR: u8 = 0x1f;
@@ -39,9 +42,9 @@ pub(crate) struct DirectoryEntry {
     offset: usize, // The offset in bytes form the start of the record
 }
 
-impl fmt::Display for DirectoryEntry {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.id, f)
+impl Display for DirectoryEntry {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        Display::fmt(&self.id, f)
     }
 }
 
@@ -223,7 +226,7 @@ fn parse_array_descriptors(byte: &[u8]) -> Result<Vec<String>> {
         // The Record Identifier is an unnamed descriptor and therefore the byte
         // array is empty. Since this is a key in a HashMap I use the name DRID
         // (Data Record ID) to identify this field.
-        Ok(vec![String::from("DRID")])
+        Ok(vec![String::from(DRID)])
     } else {
         Ok(parse_to_string(&byte[..])?
             .split('!')
@@ -297,8 +300,24 @@ pub struct Catalog<R: Read> {
 }
 
 #[derive(Debug)]
-pub struct Record {
-    data: HashMap<String, HashMap<String, Data>>,
+pub struct Record(HashMap<String, Field>);
+
+pub type Field = HashMap<String, Data>;
+
+impl Record {
+    pub fn id(&self) -> Option<i64> {
+        self.0.get(TOPLVL).and_then(|m| m.get(DRID)).and_then(|v| {
+            if let Data::Integer(i) = v {
+                *i
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn get(&self, arr_desc: &str) -> Option<&Field> {
+        self.0.get(arr_desc)
+    }
 }
 
 impl<R: Read> Catalog<R> {
@@ -316,23 +335,23 @@ impl<R: Read> Catalog<R> {
             },
         };
         let mut cur = std::io::Cursor::new(field_data);
-        let mut record = Record {
-            data: HashMap::new(),
-        };
+        let mut record = Record(HashMap::new());
         for dir_entry in dirs.iter() {
             let ddf_entry = self
                 .ddr
                 .data_descriptive_fields
                 .get(&dir_entry.id)
                 .ok_or(ErrorKind::InvalidDR)?;
-            let field_area_row = ddf_entry
+            let field_area = ddf_entry
                 .foc
                 .iter()
                 .map(|(name, parser)| Ok((name.clone(), parser.parse(&mut cur)?)))
-                .collect::<Result<HashMap<String, Data>>>()?;
+                .collect::<Result<Field>>()
+                .context(ErrorKind::InvalidDR)?;
+            // "Jump over" the last RECORD_SEPARATOR byte
             cur.seek(SeekFrom::Current(1))
                 .with_context(|err| ErrorKind::IOError(err.kind()))?;
-            record.data.insert(dir_entry.id.clone(), field_area_row);
+            record.0.insert(dir_entry.id.clone(), field_area);
         }
         Ok(Some(record))
     }

@@ -29,9 +29,8 @@ fn try_main() -> Result<()> {
             Ok(r) => last_record = Some(r),
             Err(err) => {
                 println!("Last successful parse was:");
-                println!("{:?}", last_record);
-                print_error(&err.into());
-                panic!();
+                println!("{:?}", last_record.unwrap());
+                return Err(err.into());
             }
         }
     }

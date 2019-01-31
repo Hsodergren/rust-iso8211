@@ -3,6 +3,7 @@ use crate::error::ErrorKind;
 use failure::ResultExt;
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::fmt::{Display, Formatter};
 use std::io::prelude::*;
 
 lazy_static! {
@@ -30,6 +31,22 @@ pub enum Data {
     Integer(Option<i64>),
     String(String),
     Float(Option<f64>),
+}
+
+impl Display for Data {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match &self {
+            Data::Integer(val) => match val {
+                Some(x) => Display::fmt(x, f),
+                None => Display::fmt("", f),
+            },
+            Data::String(val) => Display::fmt(val, f),
+            Data::Float(val) => match val {
+                Some(x) => Display::fmt(x, f),
+                None => Display::fmt("", f),
+            },
+        }
+    }
 }
 
 impl ParseData {
